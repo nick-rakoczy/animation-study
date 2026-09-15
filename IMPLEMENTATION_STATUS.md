@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Selected-cel information.
+Sampled filmstrip timeline.
 
 ## Phase 0: decisions and technical proofs
 
@@ -66,7 +66,7 @@ Selected-cel information.
 - [x] Fit the current frame into the available viewer area.
 - [x] Keep frame text outside the video image.
 - [x] Show the selected timeline frame, timestamp, duration, source size, and codec.
-- [ ] Show the selected cel number, exposure start, hold length, cadence label, and elapsed duration.
+- [x] Show the selected cel number, exposure start, hold length, cadence label, and elapsed duration.
 - [ ] Add the sampled filmstrip timeline.
 - [ ] Keep thumbnail aspect ratios without black thumbnail containers.
 - [ ] Add exact playhead scrubbing across sampled thumbnails.
@@ -116,7 +116,7 @@ Selected-cel information.
 
 | Date | Check | Result |
 | --- | --- | --- |
-| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, detector fixtures, sidecar save and load, job cancellation, and renderer asset-path tests |
+| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, detector fixtures, selected-cel information, sidecar save and load, job cancellation, and renderer tests |
 | 2026-09-14 | `npm run typecheck` | Passed core and renderer TypeScript checks |
 | 2026-09-14 | `npm run build` | Passed TypeScript and production renderer builds |
 | 2026-09-14 | Constant-rate fixture at `24000/1001` | Returned 24 indexed frames with exact rational timing |
@@ -138,12 +138,13 @@ Selected-cel information.
 | 2026-09-14 | Analysis sidecar tests | Created a SQLite `.animstudy` file, saved a partial score prefix, replaced it with a validated completed analysis in one transaction, and preserved the prior snapshot after invalid input |
 | 2026-09-14 | Analysis reload tests | Reconstructed scores and exposures from a matching completed sidecar without calling the analyzer, treated partial and mismatched data as cache misses, and rejected inconsistent completed rows without rerunning work |
 | 2026-09-14 | Detector fixture suite | Classified clean and noisy holds, camera motion, a dissolve, variable frame rate, a returning drawing, and a one-frame drawing at the defaults; the noisy-hold maximum was 0.000361 and the deliberate-change minimum was 0.107789 |
+| 2026-09-14 | Selected-cel information tests | Opened with pending analysis, completed hold detection in the background, then reported cel number, exposure start, exact hold count, cadence, and rational elapsed duration for both exposures |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
 - The frame-by-frame filmstrip timeline does not exist yet.
-- Analysis progress is not shown in the interface yet. Cel information, corrections, and export do not exist yet.
+- Analysis progress is not shown in the interface yet. The filmstrip timeline, corrections, and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

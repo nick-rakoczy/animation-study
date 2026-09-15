@@ -42,6 +42,7 @@ app.whenReady().then(() => {
     return result.canceled || !sourcePath ? null : service.openVideo(sourcePath);
   });
   ipcMain.handle("media:get-frame", (_event, timelinePosition: number) => service.getFrame(timelinePosition));
+  ipcMain.handle("media:get-cel-information", (_event, timelinePosition: number) => service.getCelInformation(timelinePosition));
 
   createWindow();
   app.on("activate", () => {

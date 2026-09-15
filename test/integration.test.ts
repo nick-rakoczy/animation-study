@@ -14,6 +14,7 @@ import { buildExposureSpans } from "../src/exposure-span.js";
 import { FrameProxyCache } from "../src/frame-cache.js";
 import { PlaybackProxy } from "../src/playback-proxy.js";
 import { probeVideo } from "../src/probe.js";
+import { ApplicationService } from "../src/main/application-service.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -419,9 +420,71 @@ test("creates cached luma, chroma, and edge analysis proxies", async (context) =
   await Promise.all([cache.clear(), alternateCache.clear()]);
 });
 
+test("opens the viewer with pending cel data and fills it after background analysis", async (context) => {
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+    await execFileAsync("ffprobe", ["-version"]);
+  } catch {
+    context.skip("ffmpeg and ffprobe are required for this integration test");
+    return;
+  }
+
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-cel-information-test-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const sourcePath = join(directory, "held drawing.mp4");
+  await execFileAsync("ffmpeg", [
+    "-v", "error",
+    "-f", "lavfi",
+    "-i", "color=c=black:s=160x90:r=4:d=1",
+    "-vf", "drawbox=x=30:y=15:w=100:h=60:color=white:t=fill:enable='gte(n,2)'",
+    "-c:v", "libx264",
+    "-pix_fmt", "yuv420p",
+    "-y",
+    sourcePath,
+  ]);
+
+  const service = new ApplicationService(join(directory, "cache"));
+  const opened = await service.openVideo(sourcePath);
+  assert.equal(opened.frame.displayFrameNumber, 1);
+  assert.deepEqual(await service.getCelInformation(0), { status: "pending" });
+
+  const firstCel = await waitForCelInformation(service, 1);
+  assert.deepEqual(firstCel, {
+    status: "ready",
+    displayCelNumber: 1,
+    exposureStartFrameNumber: 1,
+    holdLengthFrames: 2,
+    cadenceLabel: "On twos",
+    elapsedDuration: { numerator: "1", denominator: "2" },
+  });
+  const secondCel = await service.getCelInformation(2);
+  assert.deepEqual(secondCel, {
+    status: "ready",
+    displayCelNumber: 2,
+    exposureStartFrameNumber: 3,
+    holdLengthFrames: 2,
+    cadenceLabel: "On twos",
+    elapsedDuration: { numerator: "1", denominator: "2" },
+  });
+  assert.ok((await stat(`${sourcePath}.animstudy`)).size > 0);
+});
+
 interface SyncEvents {
   readonly videoSeconds: number;
   readonly audioSeconds: number;
+}
+
+async function waitForCelInformation(
+  service: ApplicationService,
+  timelinePosition: number,
+) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const information = await service.getCelInformation(timelinePosition);
+    if (information.status === "ready") return information;
+    if (information.status === "failed") throw new Error(information.error);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("Background analysis did not finish within five seconds");
 }
 
 async function detectSyncEvents(mediaPath: string, directory: string, name: string): Promise<SyncEvents> {

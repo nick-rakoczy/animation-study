@@ -26,6 +26,12 @@ export interface AnalysisProxy {
   readonly edgeStreamIndex: 1;
 }
 
+export interface AnalysisProxyIdentity {
+  readonly sourceFingerprint: string;
+  readonly proxySettings: AnalysisProxySettings;
+  readonly frameCount: number;
+}
+
 export interface AnalysisProxyCacheOptions {
   readonly sourcePath: string;
   readonly timing: NormalizedTiming;
@@ -127,6 +133,14 @@ export class AnalysisProxyCache {
       frameCount: this.#timing.frameCount,
       lumaChromaStreamIndex: 0,
       edgeStreamIndex: 1,
+    };
+  }
+
+  async identity(): Promise<AnalysisProxyIdentity> {
+    return {
+      sourceFingerprint: await this.#sourceFingerprint(),
+      proxySettings: this.#settings,
+      frameCount: this.#timing.frameCount,
     };
   }
 

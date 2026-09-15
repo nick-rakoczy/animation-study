@@ -5,6 +5,7 @@ const api: AnimationStudyApi = {
   getMediaToolStatus: () => ipcRenderer.invoke("media:get-tool-status"),
   openVideo: () => ipcRenderer.invoke("media:open-video"),
   getFrame: (timelinePosition) => ipcRenderer.invoke("media:get-frame", timelinePosition),
+  getCelInformation: (timelinePosition) => ipcRenderer.invoke("media:get-cel-information", timelinePosition),
 };
 
 contextBridge.exposeInMainWorld("animationStudy", api);

@@ -6,9 +6,11 @@ import {
   defaultAnalysisSensitivity,
 } from "../src/analysis-sensitivity.js";
 import { classifyBoundaries } from "../src/boundary-classifier.js";
+import { cadenceLabel, celInformationForFrame } from "../src/cel-information.js";
 import { buildExposureSpans } from "../src/exposure-span.js";
 import { analyzeSelectedRange } from "../src/range-analysis.js";
 import type { AnalysisScores, FrameComponentScore } from "../src/analysis-score.js";
+import { normalizeTiming } from "../src/timing.js";
 
 test("classifies adjacent boundaries with an uncertain interval between two thresholds", () => {
   const result = classifyBoundaries(scoresWithBoundaries([
@@ -195,6 +197,56 @@ test("rejects invalid selected ranges", () => {
     () => analyzeSelectedRange(scores, { startTimelinePosition: 0.5, endTimelinePosition: 1 }),
     /positions must be integers/,
   );
+});
+
+test("reports cel details with exact elapsed duration for variable frame timing", () => {
+  const timing = normalizeTiming({
+    streams: [{
+      index: 0,
+      codec_name: "h264",
+      width: 160,
+      height: 90,
+      time_base: "1/24",
+      avg_frame_rate: "0/0",
+      r_frame_rate: "24/1",
+    }],
+    frames: [
+      { best_effort_timestamp: 0, pkt_duration: 1 },
+      { best_effort_timestamp: 1, pkt_duration: 2 },
+      { best_effort_timestamp: 3, pkt_duration: 1 },
+      { best_effort_timestamp: 4, pkt_duration: 1 },
+    ],
+  });
+  const timeline = buildExposureSpans(classifyBoundaries(scoresWithBoundaries([
+    boundary(0, 0, 0, 0),
+    boundary(1, 0.08, 0, 0),
+    boundary(2, 0, 0, 0),
+  ])));
+
+  assert.deepEqual(celInformationForFrame(timing, timeline, 1), {
+    status: "ready",
+    displayCelNumber: 1,
+    exposureStartFrameNumber: 1,
+    holdLengthFrames: 2,
+    cadenceLabel: "On twos",
+    elapsedDuration: { numerator: "1", denominator: "8" },
+  });
+  assert.deepEqual(celInformationForFrame(timing, timeline, 2), {
+    status: "ready",
+    displayCelNumber: 2,
+    exposureStartFrameNumber: 3,
+    holdLengthFrames: 2,
+    cadenceLabel: "On twos",
+    elapsedDuration: { numerator: "1", denominator: "12" },
+  });
+});
+
+test("derives cadence labels from exact source-frame hold counts", () => {
+  assert.equal(cadenceLabel(1), "On ones");
+  assert.equal(cadenceLabel(2), "On twos");
+  assert.equal(cadenceLabel(3), "On threes");
+  assert.equal(cadenceLabel(4), "On 4s");
+  assert.throws(() => cadenceLabel(0), /positive frame count/);
 });
 
 function boundary(

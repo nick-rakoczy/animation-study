@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DisplayFrame, MediaToolStatus, OpenVideoResult } from "../../src/app-contract.js";
+import type { CelInformation, DisplayFrame, MediaToolStatus, OpenVideoResult } from "../../src/app-contract.js";
 import { timelinePositionAtPlaybackTime } from "../../src/playback.js";
 
 export function App() {
@@ -7,6 +7,7 @@ export function App() {
   const [video, setVideo] = useState<OpenVideoResult | null>(null);
   const [frame, setFrame] = useState<DisplayFrame | null>(null);
   const [timelinePosition, setTimelinePosition] = useState(0);
+  const [celInformation, setCelInformation] = useState<CelInformation | null>(null);
   const [showingPlayback, setShowingPlayback] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -26,6 +27,7 @@ export function App() {
         setVideo(opened);
         setFrame(opened.frame);
         setTimelinePosition(opened.frame.timelinePosition);
+        setCelInformation({ status: "pending" });
         setShowingPlayback(false);
         setPlaying(false);
       }
@@ -94,6 +96,30 @@ export function App() {
   }, [playing, video]);
 
   useEffect(() => {
+    if (!video) {
+      setCelInformation(null);
+      return;
+    }
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      try {
+        const result = await window.animationStudy.getCelInformation(timelinePosition);
+        if (cancelled) return;
+        setCelInformation(result);
+        if (result.status === "pending") retry = setTimeout(() => void refresh(), 200);
+      } catch (caught) {
+        if (!cancelled) setCelInformation({ status: "failed", error: errorMessage(caught) });
+      }
+    };
+    void refresh();
+    return () => {
+      cancelled = true;
+      if (retry) clearTimeout(retry);
+    };
+  }, [timelinePosition, video]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!video) return;
       if (event.key === " " && !isInteractiveTarget(event.target)) {
@@ -117,6 +143,9 @@ export function App() {
     ? compactVersion(tools.ffmpegVersion)
     : tools?.error ?? "Checking FFmpeg";
   const selectedTiming = video?.playbackFrames[timelinePosition];
+  const pendingCelValue = video ? "Pending analysis" : undefined;
+  const readyCel = celInformation?.status === "ready" ? celInformation : null;
+  const unavailableCelValue = celInformation?.status === "failed" ? "Unavailable" : pendingCelValue;
 
   return (
     <main className="app-shell">
@@ -167,7 +196,15 @@ export function App() {
           <Info label="Frame duration" value={selectedTiming ? formatRationalSeconds(selectedTiming.presentationDuration) : undefined} />
           <Info label="Source size" value={video ? `${video.width} × ${video.height}` : undefined} />
           <Info label="Codec" value={video?.codec ?? undefined} />
-          <Info label="Cel" value="Pending analysis" />
+          <Info
+            label="Cel"
+            value={readyCel ? readyCel.displayCelNumber.toString().padStart(4, "0") : unavailableCelValue}
+            title={celInformation?.status === "failed" ? celInformation.error : undefined}
+          />
+          <Info label="Exposure start" value={readyCel ? `Frame ${readyCel.exposureStartFrameNumber}` : unavailableCelValue} />
+          <Info label="Hold length" value={readyCel ? `${readyCel.holdLengthFrames} ${readyCel.holdLengthFrames === 1 ? "frame" : "frames"}` : unavailableCelValue} />
+          <Info label="Cadence" value={readyCel?.cadenceLabel ?? unavailableCelValue} />
+          <Info label="Elapsed duration" value={readyCel ? formatRationalSeconds(readyCel.elapsedDuration) : unavailableCelValue} />
         </aside>
       </section>
 
@@ -185,11 +222,15 @@ export function App() {
   );
 }
 
-function Info({ label, value }: { readonly label: string; readonly value: string | undefined }) {
+function Info({ label, value, title }: {
+  readonly label: string;
+  readonly value: string | undefined;
+  readonly title?: string | undefined;
+}) {
   return (
     <div className="info-row">
       <dt>{label}</dt>
-      <dd>{value ?? "—"}</dd>
+      <dd title={title}>{value ?? "—"}</dd>
     </div>
   );
 }

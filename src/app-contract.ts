@@ -36,8 +36,21 @@ export interface OpenVideoResult {
   readonly frame: DisplayFrame;
 }
 
+export type CelInformation =
+  | { readonly status: "pending" }
+  | { readonly status: "failed"; readonly error: string }
+  | {
+      readonly status: "ready";
+      readonly displayCelNumber: number;
+      readonly exposureStartFrameNumber: number;
+      readonly holdLengthFrames: number;
+      readonly cadenceLabel: string;
+      readonly elapsedDuration: Rational;
+    };
+
 export interface AnimationStudyApi {
   getMediaToolStatus(): Promise<MediaToolStatus>;
   openVideo(): Promise<OpenVideoResult | null>;
   getFrame(timelinePosition: number): Promise<DisplayFrame>;
+  getCelInformation(timelinePosition: number): Promise<CelInformation>;
 }
