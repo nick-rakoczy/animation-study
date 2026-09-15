@@ -63,7 +63,7 @@ export type CelNavigationResult =
 export type CorrectionInformation =
   | { readonly status: "pending" }
   | { readonly status: "failed"; readonly error: string }
-  | ({ readonly status: "ready" } & ExposureCorrectionState);
+  | ({ readonly status: "ready"; readonly canUndo: boolean; readonly canRedo: boolean } & ExposureCorrectionState);
 
 export interface AnimationStudyApi {
   getMediaToolStatus(): Promise<MediaToolStatus>;
@@ -73,5 +73,7 @@ export interface AnimationStudyApi {
   getAdjacentCelPosition(timelinePosition: number, direction: "previous" | "next"): Promise<CelNavigationResult>;
   getCorrectionInformation(timelinePosition: number): Promise<CorrectionInformation>;
   applyExposureCorrection(action: ExposureCorrectionAction): Promise<void>;
+  undoExposureCorrection(): Promise<void>;
+  redoExposureCorrection(): Promise<void>;
   getTimelineThumbnails(sampleCount: number): Promise<readonly TimelineThumbnail[]>;
 }

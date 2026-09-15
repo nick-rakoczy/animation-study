@@ -90,3 +90,13 @@ test("information panel exposes all exposure correction actions", async () => {
   assert.match(source, /Representative frame/);
   assert.match(source, /Uncertain boundary before this frame/);
 });
+
+test("exposure corrections have undo and redo controls and shortcuts", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  assert.match(source, /undoExposureCorrection/);
+  assert.match(source, /redoExposureCorrection/);
+  assert.match(source, /readyCorrection\?\.canUndo/);
+  assert.match(source, /readyCorrection\?\.canRedo/);
+  assert.match(source, /event\.key\.toLowerCase\(\) === "z"/);
+  assert.match(source, /event\.key\.toLowerCase\(\) === "y"/);
+});

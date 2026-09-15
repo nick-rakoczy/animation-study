@@ -9,6 +9,8 @@ const api: AnimationStudyApi = {
   getAdjacentCelPosition: (timelinePosition, direction) => ipcRenderer.invoke("media:get-adjacent-cel-position", timelinePosition, direction),
   getCorrectionInformation: (timelinePosition) => ipcRenderer.invoke("media:get-correction-information", timelinePosition),
   applyExposureCorrection: (action) => ipcRenderer.invoke("media:apply-exposure-correction", action),
+  undoExposureCorrection: () => ipcRenderer.invoke("media:undo-exposure-correction"),
+  redoExposureCorrection: () => ipcRenderer.invoke("media:redo-exposure-correction"),
   getTimelineThumbnails: (sampleCount) => ipcRenderer.invoke("media:get-timeline-thumbnails", sampleCount),
 };
 

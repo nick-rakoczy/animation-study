@@ -368,6 +368,19 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+.correction-history-buttons {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.correction-history-buttons button {
+  flex: 1;
+  min-height: 30px;
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
 .correction-buttons {
   display: grid;
   grid-template-columns: 1fr 1fr;

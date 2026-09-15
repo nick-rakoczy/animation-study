@@ -264,12 +264,37 @@ export function App() {
     }
   }, [correctionBusy, timelinePosition, video]);
 
+  const moveCorrectionHistory = useCallback(async (direction: "undo" | "redo") => {
+    if (!video || correctionBusy) return;
+    setCorrectionBusy(true);
+    setError(null);
+    try {
+      if (direction === "undo") await window.animationStudy.undoExposureCorrection();
+      else await window.animationStudy.redoExposureCorrection();
+      setCorrectionRevision((revision) => revision + 1);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setCorrectionBusy(false);
+    }
+  }, [correctionBusy, video]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!video) return;
       if (event.key === " " && !isInteractiveTarget(event.target)) {
         event.preventDefault();
         void togglePlayback();
+        return;
+      }
+      const historyShortcutAllowed = !isInteractiveTarget(event.target) && (event.ctrlKey || event.metaKey) && !event.altKey;
+      const undoCorrection = event.key.toLowerCase() === "z" && !event.shiftKey && historyShortcutAllowed;
+      const redoCorrection = (
+        event.key.toLowerCase() === "y" || event.key.toLowerCase() === "z" && event.shiftKey
+      ) && historyShortcutAllowed;
+      if (undoCorrection || redoCorrection) {
+        event.preventDefault();
+        void moveCorrectionHistory(undoCorrection ? "undo" : "redo");
         return;
       }
       const timelineShortcutAllowed = !isInteractiveTarget(event.target) && !event.ctrlKey && !event.metaKey && !event.altKey;
@@ -291,7 +316,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [navigateCel, scaleTimeline, showFrame, timelinePosition, togglePlayback, video]);
+  }, [moveCorrectionHistory, navigateCel, scaleTimeline, showFrame, timelinePosition, togglePlayback, video]);
 
   const toolDescription = tools?.available
     ? compactVersion(tools.ffmpegVersion)
@@ -375,6 +400,16 @@ export function App() {
           <Info label="Elapsed duration" value={readyCel ? formatRationalSeconds(readyCel.elapsedDuration) : unavailableCelValue} />
           <section className="corrections" aria-label="Exposure corrections">
             <h2>Corrections</h2>
+            <div className="correction-history-buttons">
+              <button
+                disabled={!readyCorrection?.canUndo || correctionBusy}
+                onClick={() => void moveCorrectionHistory("undo")}
+              >Undo</button>
+              <button
+                disabled={!readyCorrection?.canRedo || correctionBusy}
+                onClick={() => void moveCorrectionHistory("redo")}
+              >Redo</button>
+            </div>
             <p className="representative-readout">
               {readyCorrection
                 ? `Representative frame ${readyCorrection.representativeFrameNumber}`

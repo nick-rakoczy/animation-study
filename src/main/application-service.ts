@@ -27,6 +27,8 @@ interface VideoSession {
   readonly thumbnailAbortController: AbortController;
   analysisTimeline: ExposureTimeline | null;
   analysisError: string | null;
+  readonly correctionUndoStack: ExposureTimeline[];
+  readonly correctionRedoStack: ExposureTimeline[];
 }
 
 export class ApplicationService {
@@ -68,6 +70,8 @@ export class ApplicationService {
       thumbnailAbortController: new AbortController(),
       analysisTimeline: null,
       analysisError: null,
+      correctionUndoStack: [],
+      correctionRedoStack: [],
     };
     this.#session = session;
     const frame = await this.getFrame(0);
@@ -137,14 +141,40 @@ export class ApplicationService {
     }
     if (session.analysisError) return { status: "failed", error: session.analysisError };
     if (!session.analysisTimeline) return { status: "pending" };
-    return { status: "ready", ...correctionStateForFrame(session.analysisTimeline, timelinePosition) };
+    return {
+      status: "ready",
+      ...correctionStateForFrame(session.analysisTimeline, timelinePosition),
+      canUndo: session.correctionUndoStack.length > 0,
+      canRedo: session.correctionRedoStack.length > 0,
+    };
   }
 
   async applyExposureCorrection(action: ExposureCorrectionAction): Promise<void> {
     const session = this.#session;
     if (!session) throw new Error("Open a video before applying an exposure correction");
     if (!session.analysisTimeline) throw new Error("Exposure analysis is not ready");
-    session.analysisTimeline = applyExposureCorrection(session.analysisTimeline, action);
+    const corrected = applyExposureCorrection(session.analysisTimeline, action);
+    session.correctionUndoStack.push(session.analysisTimeline);
+    session.correctionRedoStack.length = 0;
+    session.analysisTimeline = corrected;
+  }
+
+  async undoExposureCorrection(): Promise<void> {
+    const session = this.#session;
+    if (!session?.analysisTimeline) throw new Error("Exposure analysis is not ready");
+    const previous = session.correctionUndoStack.pop();
+    if (!previous) return;
+    session.correctionRedoStack.push(session.analysisTimeline);
+    session.analysisTimeline = previous;
+  }
+
+  async redoExposureCorrection(): Promise<void> {
+    const session = this.#session;
+    if (!session?.analysisTimeline) throw new Error("Exposure analysis is not ready");
+    const next = session.correctionRedoStack.pop();
+    if (!next) return;
+    session.correctionUndoStack.push(session.analysisTimeline);
+    session.analysisTimeline = next;
   }
 
   async getTimelineThumbnails(sampleCount: number): Promise<readonly TimelineThumbnail[]> {

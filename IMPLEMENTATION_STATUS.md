@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Undo and redo for every correction.
+Accessible focus behavior and complete keyboard coverage.
 
 ## Phase 0: decisions and technical proofs
 
@@ -75,7 +75,7 @@ Undo and redo for every correction.
 - [x] Add inclusive timeline range selection.
 - [x] Add `Shift+Left` and `Shift+Right` cel navigation.
 - [x] Add split, merge, representative-frame selection, and boundary confirmation.
-- [ ] Add undo and redo for every correction.
+- [x] Add undo and redo for every correction.
 - [ ] Add accessible focus behavior and complete keyboard coverage.
 - [ ] Keep the interface responsive while background analysis runs.
 
@@ -147,12 +147,13 @@ Undo and redo for every correction.
 | 2026-09-14 | Inclusive timeline range tests | Normalized forward and reverse drags, counted both endpoint frames, gave one-frame ranges visible width, and added range-mode and Shift-drag controls |
 | 2026-09-14 | Adjacent-cel navigation tests | Resolved previous and next exposure starts from any frame in a hold, stopped at file boundaries, and bound the actions to shifted arrow keys |
 | 2026-09-14 | Exposure correction tests | Split and merged spans, changed representative frames, confirmed uncertain boundaries as held or changed, reindexed chronological cels, and exposed guarded controls in the information panel |
+| 2026-09-14 | Correction history tests | Undid and redid complete exposure timelines across representative, split, and merge edits; cleared redo after a new correction; and added buttons plus standard keyboard shortcuts |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
 - Timeline ranges and exposure corrections are session-only until export and project correction persistence are implemented.
-- Analysis progress is not shown in the interface yet. Timeline corrections and export do not exist yet.
+- Analysis progress is not shown in the interface yet. Export does not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

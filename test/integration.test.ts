@@ -494,6 +494,8 @@ test("opens the viewer with pending cel data and fills it after background analy
     representativeFrameNumber: 1,
     selectedFrameIsRepresentative: false,
     boundaryBeforeNeedsReview: false,
+    canUndo: false,
+    canRedo: false,
   });
   await service.applyExposureCorrection({ type: "select-representative", timelinePosition: 1 });
   assert.equal((await service.getCorrectionInformation(1)).status, "ready");
@@ -502,6 +504,18 @@ test("opens the viewer with pending cel data and fills it after background analy
   assert.equal((await service.getCelInformation(1) as { displayCelNumber: number }).displayCelNumber, 2);
   await service.applyExposureCorrection({ type: "merge-previous", timelinePosition: 1 });
   assert.equal((await service.getCelInformation(1) as { displayCelNumber: number }).displayCelNumber, 1);
+  await service.undoExposureCorrection();
+  assert.equal((await service.getCelInformation(1) as { displayCelNumber: number }).displayCelNumber, 2);
+  assert.deepEqual(await service.getCorrectionInformation(1).then((information) => information.status === "ready"
+    ? { canUndo: information.canUndo, canRedo: information.canRedo }
+    : information), { canUndo: true, canRedo: true });
+  await service.undoExposureCorrection();
+  assert.equal((await service.getCelInformation(1) as { displayCelNumber: number }).displayCelNumber, 1);
+  assert.equal((await service.getCorrectionInformation(1) as { representativeFrameNumber: number }).representativeFrameNumber, 2);
+  await service.redoExposureCorrection();
+  assert.equal((await service.getCelInformation(1) as { displayCelNumber: number }).displayCelNumber, 2);
+  await service.applyExposureCorrection({ type: "merge-next", timelinePosition: 1 });
+  assert.equal((await service.getCorrectionInformation(1) as { canRedo: boolean }).canRedo, false);
   assert.ok((await stat(`${sourcePath}.animstudy`)).size > 0);
 });
 
