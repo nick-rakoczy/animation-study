@@ -1,0 +1,23 @@
+{
+  "name": "animation-study",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local tools for studying animation timing",
+  "bin": {
+    "animation-study-probe": "dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "probe": "node dist/src/cli.js",
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
