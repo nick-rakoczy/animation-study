@@ -23,3 +23,15 @@ test("renderer includes the sampled timeline filmstrip", async () => {
   assert.match(source, /getTimelineThumbnails\(12\)/);
   assert.match(source, /timelineThumbnails\.map/);
 });
+
+test("timeline thumbnails preserve their image aspect ratio without black containers", async () => {
+  const styles = await readFile("renderer/src/styles.css", "utf8");
+  const thumbnailRule = styles.match(/\.timeline-thumbnail \{(?<rule>[^}]*)\}/s)?.groups?.rule;
+  const imageRule = styles.match(/\.timeline-thumbnail img \{(?<rule>[^}]*)\}/s)?.groups?.rule;
+  assert.ok(thumbnailRule);
+  assert.ok(imageRule);
+  assert.doesNotMatch(thumbnailRule, /background\s*:/);
+  assert.match(imageRule, /width:\s*100%/);
+  assert.match(imageRule, /height:\s*auto/);
+  assert.doesNotMatch(imageRule, /object-fit\s*:/);
+});

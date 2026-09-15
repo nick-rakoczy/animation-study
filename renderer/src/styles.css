@@ -60,6 +60,7 @@ button:disabled {
 .filmstrip {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
   gap: 4px;
   height: 100%;
 }
@@ -67,11 +68,9 @@ button:disabled {
 .timeline-thumbnail {
   position: relative;
   min-width: 0;
-  height: 100%;
   margin: 0;
   overflow: hidden;
   border: 1px solid #303237;
-  background: #0d0e10;
 }
 
 .timeline-thumbnail.selected {
@@ -82,8 +81,7 @@ button:disabled {
 .timeline-thumbnail img {
   display: block;
   width: 100%;
-  height: calc(100% - 20px);
-  object-fit: cover;
+  height: auto;
 }
 
 .timeline-thumbnail figcaption {

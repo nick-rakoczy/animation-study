@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Thumbnail aspect ratios without black containers.
+Exact playhead scrubbing across sampled thumbnails.
 
 ## Phase 0: decisions and technical proofs
 
@@ -68,7 +68,7 @@ Thumbnail aspect ratios without black containers.
 - [x] Show the selected timeline frame, timestamp, duration, source size, and codec.
 - [x] Show the selected cel number, exposure start, hold length, cadence label, and elapsed duration.
 - [x] Add the sampled filmstrip timeline.
-- [ ] Keep thumbnail aspect ratios without black thumbnail containers.
+- [x] Keep thumbnail aspect ratios without black thumbnail containers.
 - [ ] Add exact playhead scrubbing across sampled thumbnails.
 - [ ] Add horizontal timeline scrolling.
 - [ ] Add `+` and `-` timeline scale controls.
@@ -140,12 +140,13 @@ Thumbnail aspect ratios without black containers.
 | 2026-09-14 | Detector fixture suite | Classified clean and noisy holds, camera motion, a dissolve, variable frame rate, a returning drawing, and a one-frame drawing at the defaults; the noisy-hold maximum was 0.000361 and the deliberate-change minimum was 0.107789 |
 | 2026-09-14 | Selected-cel information tests | Opened with pending analysis, completed hold detection in the background, then reported cel number, exposure start, exact hold count, cadence, and rational elapsed duration for both exposures |
 | 2026-09-14 | Sampled filmstrip timeline tests | Requested a bounded sample across the source, returned the first and last source frames with numbered PNG data URLs, and rendered the samples below the viewer |
+| 2026-09-14 | Filmstrip thumbnail layout test | Kept each image at its intrinsic aspect ratio, removed cover cropping, and removed black thumbnail container fills |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
-- The filmstrip has a fixed sample count and does not yet support aspect-correct sizing, scrubbing, scrolling, or scale controls.
+- The filmstrip has a fixed sample count and does not yet support scrubbing, scrolling, or scale controls.
 - Analysis progress is not shown in the interface yet. Timeline corrections and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.
