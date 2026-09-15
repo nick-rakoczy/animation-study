@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CelInformation, DisplayFrame, MediaToolStatus, OpenVideoResult } from "../../src/app-contract.js";
+import type { CelInformation, DisplayFrame, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
 import { timelinePositionAtPlaybackTime } from "../../src/playback.js";
 
 export function App() {
@@ -8,6 +8,8 @@ export function App() {
   const [frame, setFrame] = useState<DisplayFrame | null>(null);
   const [timelinePosition, setTimelinePosition] = useState(0);
   const [celInformation, setCelInformation] = useState<CelInformation | null>(null);
+  const [timelineThumbnails, setTimelineThumbnails] = useState<readonly TimelineThumbnail[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
   const [showingPlayback, setShowingPlayback] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -28,6 +30,7 @@ export function App() {
         setFrame(opened.frame);
         setTimelinePosition(opened.frame.timelinePosition);
         setCelInformation({ status: "pending" });
+        setTimelineThumbnails([]);
         setShowingPlayback(false);
         setPlaying(false);
       }
@@ -37,6 +40,25 @@ export function App() {
       setBusy(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!video) return;
+    let cancelled = false;
+    setTimelineLoading(true);
+    void window.animationStudy.getTimelineThumbnails(12).then(
+      (thumbnails) => {
+        if (!cancelled) setTimelineThumbnails(thumbnails);
+      },
+      (caught) => {
+        if (!cancelled) setError(errorMessage(caught));
+      },
+    ).finally(() => {
+      if (!cancelled) setTimelineLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [video]);
 
   const showFrame = useCallback(async (position: number) => {
     if (!video || busy) return;
@@ -206,6 +228,28 @@ export function App() {
           <Info label="Cadence" value={readyCel?.cadenceLabel ?? unavailableCelValue} />
           <Info label="Elapsed duration" value={readyCel ? formatRationalSeconds(readyCel.elapsedDuration) : unavailableCelValue} />
         </aside>
+      </section>
+
+      <section className="timeline" aria-label="Timeline filmstrip" aria-busy={timelineLoading}>
+        {video ? (
+          timelineThumbnails.length > 0 ? (
+            <div className="filmstrip">
+              {timelineThumbnails.map((thumbnail) => (
+                <figure
+                  className={thumbnail.timelinePosition === timelinePosition ? "timeline-thumbnail selected" : "timeline-thumbnail"}
+                  key={thumbnail.timelinePosition}
+                >
+                  <img src={thumbnail.imageDataUrl} alt="" />
+                  <figcaption>{thumbnail.displayFrameNumber}</figcaption>
+                </figure>
+              ))}
+            </div>
+          ) : (
+            <p className="timeline-message">{timelineLoading ? "Loading filmstrip" : "Filmstrip unavailable"}</p>
+          )
+        ) : (
+          <p className="timeline-message">Timeline</p>
+        )}
       </section>
 
       <footer className="transport">

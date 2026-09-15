@@ -43,10 +43,69 @@ button:disabled {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) 112px auto;
   width: 100%;
   height: 100%;
   background: #17181b;
+}
+
+.timeline {
+  min-width: 0;
+  padding: 10px 12px;
+  overflow: hidden;
+  border-top: 1px solid #303237;
+  background: #151619;
+}
+
+.filmstrip {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 4px;
+  height: 100%;
+}
+
+.timeline-thumbnail {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #303237;
+  background: #0d0e10;
+}
+
+.timeline-thumbnail.selected {
+  border-color: #e4a853;
+  box-shadow: inset 0 0 0 1px #e4a853;
+}
+
+.timeline-thumbnail img {
+  display: block;
+  width: 100%;
+  height: calc(100% - 20px);
+  object-fit: cover;
+}
+
+.timeline-thumbnail figcaption {
+  height: 20px;
+  padding: 3px 5px;
+  overflow: hidden;
+  color: #a9acb1;
+  background: #202226;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-message {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: #777b82;
+  font-size: 12px;
 }
 
 .top-bar {

@@ -16,3 +16,10 @@ test("frame information panel includes completed and pending cel fields", async 
   assert.match(source, /Pending analysis/);
   assert.match(source, /getCelInformation/);
 });
+
+test("renderer includes the sampled timeline filmstrip", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  assert.match(source, /aria-label="Timeline filmstrip"/);
+  assert.match(source, /getTimelineThumbnails\(12\)/);
+  assert.match(source, /timelineThumbnails\.map/);
+});

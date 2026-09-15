@@ -24,6 +24,12 @@ export interface PlaybackFrame {
   readonly playbackTimestamp: Rational;
 }
 
+export interface TimelineThumbnail {
+  readonly timelinePosition: number;
+  readonly displayFrameNumber: number;
+  readonly imageDataUrl: string;
+}
+
 export interface OpenVideoResult {
   readonly sourcePath: string;
   readonly sourceName: string;
@@ -53,4 +59,5 @@ export interface AnimationStudyApi {
   openVideo(): Promise<OpenVideoResult | null>;
   getFrame(timelinePosition: number): Promise<DisplayFrame>;
   getCelInformation(timelinePosition: number): Promise<CelInformation>;
+  getTimelineThumbnails(sampleCount: number): Promise<readonly TimelineThumbnail[]>;
 }
