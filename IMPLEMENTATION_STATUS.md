@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Analysis proxy generation.
+Boundary classification thresholds.
 
 ## Phase 0: decisions and technical proofs
 
@@ -47,8 +47,8 @@ Analysis proxy generation.
 
 ## Phase 2: exposure analysis
 
-- [ ] Create small luma, chroma, and edge analysis proxies.
-- [ ] Compare adjacent frames and store the component scores.
+- [x] Create small luma, chroma, and edge analysis proxies.
+- [x] Compare adjacent frames and store the component scores.
 - [ ] Classify boundaries as same, changed, or uncertain with two thresholds.
 - [ ] Build chronological exposure spans without merging non-adjacent matches.
 - [ ] Add the sensitivity setting and reset action.
@@ -116,7 +116,7 @@ Analysis proxy generation.
 
 | Date | Check | Result |
 | --- | --- | --- |
-| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback-proxy synchronization, one-hour source, and renderer asset-path tests |
+| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, analysis proxy and scoring, and renderer asset-path tests |
 | 2026-09-14 | `npm run typecheck` | Passed core and renderer TypeScript checks |
 | 2026-09-14 | `npm run build` | Passed TypeScript and production renderer builds |
 | 2026-09-14 | Constant-rate fixture at `24000/1001` | Returned 24 indexed frames with exact rational timing |
@@ -128,12 +128,14 @@ Analysis proxy generation.
 | 2026-09-14 | Automated audio/video synchronization fixture | A decoded flash and tone retained their relative timing through proxy generation within 30 ms |
 | 2026-09-14 | One-hour 1080p source fixture | Kept at most three 1280-pixel PNG proxies plus one compressed WebM playback file; created no full-resolution frame sequence |
 | 2026-09-14 | `npm run benchmark:frame-step` | Across 200 cached 1280x720 PNG loads per direction, forward steps had a 1.743 ms maximum and backward steps had a 1.998 ms maximum; both passed the 33.333 ms target |
+| 2026-09-14 | Analysis proxy fixture | Cached reusable 64x36 lossless FFV1 luma/chroma and edge streams; decoded three frames per stream and detected the fixture's color and edge changes |
+| 2026-09-14 | Adjacent-frame scoring fixture | Streamed the analysis proxy with bounded memory, stored normalized component scores for both boundaries, and reused the validated score file |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
 - The frame-by-frame filmstrip timeline does not exist yet.
-- Exposure detection, cel information, corrections, sidecar persistence, and export do not exist yet.
+- Exposure classification and grouping, cel information, corrections, sidecar persistence, and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

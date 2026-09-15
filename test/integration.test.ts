@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
+import { AnalysisProxyCache } from "../src/analysis-proxy.js";
+import { AnalysisScoreCache } from "../src/analysis-score.js";
 import { createContactSheet } from "../src/contact-sheet.js";
 import { FrameProxyCache } from "../src/frame-cache.js";
 import { PlaybackProxy } from "../src/playback-proxy.js";
@@ -235,6 +237,143 @@ test("opens a one-hour 1080p source without creating a full-resolution frame seq
   await Promise.all([frameCache.clear(), playback.clear()]);
 });
 
+test("creates cached luma, chroma, and edge analysis proxies", async (context) => {
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+    await execFileAsync("ffprobe", ["-version"]);
+  } catch {
+    context.skip("ffmpeg and ffprobe are required for this integration test");
+    return;
+  }
+
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-analysis-proxy-test-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const sourcePath = join(directory, "analysis colors and edges.mp4");
+  await execFileAsync("ffmpeg", [
+    "-v", "error",
+    "-f", "lavfi",
+    "-i", "color=c=black:s=160x90:r=1:d=3",
+    "-vf", "drawbox=x=0:y=0:w=160:h=90:color=red:t=fill:enable='between(t,1,1.999)',drawbox=x=80:y=0:w=80:h=90:color=white:t=fill:enable='between(t,2,2.999)'",
+    "-c:v", "libx264",
+    "-pix_fmt", "yuv420p",
+    "-y",
+    sourcePath,
+  ]);
+
+  const timing = await probeVideo(sourcePath);
+  assert.equal(timing.frameCount, 3);
+  const cache = new AnalysisProxyCache({ sourcePath, timing, cacheRoot: join(directory, "cache") });
+  const proxy = await cache.create();
+  const firstModifiedTime = (await stat(proxy.path)).mtimeMs;
+  const reusedProxy = await cache.create();
+  assert.equal(reusedProxy.path, proxy.path);
+  assert.equal((await stat(reusedProxy.path)).mtimeMs, firstModifiedTime);
+  assert.equal(proxy.frameCount, 3);
+  assert.deepEqual(proxy.settings, {
+    width: 64,
+    height: 36,
+    edgeLowThreshold: 0.1,
+    edgeHighThreshold: 0.4,
+  });
+
+  const streamProbe = await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-count_frames",
+    "-select_streams", "v",
+    "-show_entries", "stream=index,codec_name,pix_fmt,width,height,nb_read_frames",
+    "-of", "json",
+    proxy.path,
+  ]);
+  const streamMetadata = JSON.parse(streamProbe.stdout) as {
+    readonly streams: readonly {
+      readonly index: number;
+      readonly codec_name: string;
+      readonly pix_fmt: string;
+      readonly width: number;
+      readonly height: number;
+      readonly nb_read_frames: string;
+    }[];
+  };
+  assert.deepEqual(streamMetadata.streams, [
+    { index: 0, codec_name: "ffv1", width: 64, height: 36, pix_fmt: "yuv444p", nb_read_frames: "3" },
+    { index: 1, codec_name: "ffv1", width: 64, height: 36, pix_fmt: "gray", nb_read_frames: "3" },
+  ]);
+
+  const colorPlanesPath = join(directory, "color-planes.yuv");
+  const edgePlanesPath = join(directory, "edge-planes.gray");
+  await Promise.all([
+    execFileAsync("ffmpeg", [
+      "-v", "error",
+      "-i", proxy.path,
+      "-map", "0:v:0",
+      "-pix_fmt", "yuv444p",
+      "-fps_mode", "passthrough",
+      "-f", "rawvideo",
+      "-y",
+      colorPlanesPath,
+    ]),
+    execFileAsync("ffmpeg", [
+      "-v", "error",
+      "-i", proxy.path,
+      "-map", "0:v:1",
+      "-pix_fmt", "gray",
+      "-fps_mode", "passthrough",
+      "-f", "rawvideo",
+      "-y",
+      edgePlanesPath,
+    ]),
+  ]);
+
+  const colorPlanes = await readFile(colorPlanesPath);
+  const edgePlanes = await readFile(edgePlanesPath);
+  const pixelsPerFrame = 64 * 36;
+  const colorBytesPerFrame = pixelsPerFrame * 3;
+  assert.equal(colorPlanes.length, colorBytesPerFrame * 3);
+  assert.equal(edgePlanes.length, pixelsPerFrame * 3);
+
+  const blackLuma = colorPlanes.subarray(0, pixelsPerFrame);
+  const redLuma = colorPlanes.subarray(colorBytesPerFrame, colorBytesPerFrame + pixelsPerFrame);
+  const blackChroma = colorPlanes.subarray(pixelsPerFrame, colorBytesPerFrame);
+  const redChroma = colorPlanes.subarray(colorBytesPerFrame + pixelsPerFrame, colorBytesPerFrame * 2);
+  assert.ok(byteDifference(blackLuma, redLuma) > 0);
+  assert.ok(byteDifference(blackChroma, redChroma) > 0);
+
+  const blackEdges = edgePlanes.subarray(0, pixelsPerFrame);
+  const dividedEdges = edgePlanes.subarray(pixelsPerFrame * 2, pixelsPerFrame * 3);
+  assert.ok(byteTotal(dividedEdges) > byteTotal(blackEdges));
+
+  const scoreCache = new AnalysisScoreCache(proxy);
+  const scores = await scoreCache.create();
+  assert.deepEqual(scores.boundaries.map((boundary) => [
+    boundary.fromTimelinePosition,
+    boundary.toTimelinePosition,
+  ]), [[0, 1], [1, 2]]);
+  for (const boundary of scores.boundaries) {
+    assert.ok(boundary.lumaDifference >= 0 && boundary.lumaDifference <= 1);
+    assert.ok(boundary.chromaDifference >= 0 && boundary.chromaDifference <= 1);
+    assert.ok(boundary.edgeDifference >= 0 && boundary.edgeDifference <= 1);
+  }
+  assert.ok(scores.boundaries[0]!.lumaDifference > 0);
+  assert.ok(scores.boundaries[0]!.chromaDifference > 0);
+  assert.ok(scores.boundaries[1]!.edgeDifference > scores.boundaries[0]!.edgeDifference);
+  const scorePath = join(dirname(proxy.path), "component-scores-v1.json");
+  const scoreModifiedTime = (await stat(scorePath)).mtimeMs;
+  assert.deepEqual(JSON.parse(await readFile(scorePath, "utf8")), scores);
+  assert.deepEqual(await scoreCache.create(), scores);
+  assert.equal((await stat(scorePath)).mtimeMs, scoreModifiedTime);
+
+  const alternateCache = new AnalysisProxyCache({
+    sourcePath,
+    timing,
+    cacheRoot: join(directory, "cache"),
+    settings: { width: 32, height: 18 },
+  });
+  const alternateProxy = await alternateCache.create();
+  assert.equal(alternateProxy.sourceFingerprint, proxy.sourceFingerprint);
+  assert.notEqual(alternateProxy.path, proxy.path);
+  await Promise.all([cache.clear(), alternateCache.clear()]);
+});
+
 interface SyncEvents {
   readonly videoSeconds: number;
   readonly audioSeconds: number;
@@ -309,4 +448,17 @@ async function detectSyncEvents(mediaPath: string, directory: string, name: stri
     videoSeconds: Number(parsedFrames.frames[brightFrame]!.best_effort_timestamp_time),
     audioSeconds: toneSample / 48000,
   };
+}
+
+function byteDifference(left: Uint8Array, right: Uint8Array): number {
+  assert.equal(left.length, right.length);
+  let total = 0;
+  for (let index = 0; index < left.length; index += 1) total += Math.abs(left[index]! - right[index]!);
+  return total;
+}
+
+function byteTotal(bytes: Uint8Array): number {
+  let total = 0;
+  for (const byte of bytes) total += byte;
+  return total;
 }
