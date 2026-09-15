@@ -58,11 +58,32 @@ button:disabled {
 }
 
 .filmstrip {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   align-items: start;
   gap: 4px;
   height: 100%;
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.filmstrip:focus-visible {
+  outline: 2px solid #e4a853;
+  outline-offset: 2px;
+}
+
+.timeline-playhead {
+  position: absolute;
+  z-index: 2;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  pointer-events: none;
+  background: #f0bc70;
+  box-shadow: 0 0 0 1px rgb(20 14 7 / 65%);
+  transform: translateX(-1px);
 }
 
 .timeline-thumbnail {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CelInformation, DisplayFrame, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
 import { timelinePositionAtPlaybackTime } from "../../src/playback.js";
+import { timelinePositionFromOffset } from "../../src/timeline-scrub.js";
 
 export function App() {
   const [tools, setTools] = useState<MediaToolStatus | null>(null);
@@ -15,6 +16,9 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const videoElement = useRef<HTMLVideoElement>(null);
+  const displayedFramePosition = useRef(0);
+  const requestedFramePosition = useRef<number | null>(null);
+  const frameRequestRunning = useRef(false);
 
   useEffect(() => {
     void window.animationStudy.getMediaToolStatus().then(setTools);
@@ -28,6 +32,8 @@ export function App() {
       if (opened) {
         setVideo(opened);
         setFrame(opened.frame);
+        displayedFramePosition.current = opened.frame.timelinePosition;
+        requestedFramePosition.current = null;
         setTimelinePosition(opened.frame.timelinePosition);
         setCelInformation({ status: "pending" });
         setTimelineThumbnails([]);
@@ -60,27 +66,46 @@ export function App() {
     };
   }, [video]);
 
-  const showFrame = useCallback(async (position: number) => {
-    if (!video || busy) return;
+  const showFrame = useCallback((position: number) => {
+    if (!video) return;
     videoElement.current?.pause();
     setShowingPlayback(false);
     const clamped = Math.max(0, Math.min(video.playbackFrames.length - 1, position));
-    if (clamped === frame?.timelinePosition) {
-      setTimelinePosition(clamped);
-      return;
-    }
+    requestedFramePosition.current = clamped;
+    setTimelinePosition(clamped);
+    if (frameRequestRunning.current) return;
+
+    frameRequestRunning.current = true;
     setBusy(true);
     setError(null);
-    try {
-      const requested = await window.animationStudy.getFrame(clamped);
-      setFrame(requested);
-      setTimelinePosition(requested.timelinePosition);
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, frame, video]);
+    void (async () => {
+      try {
+        while (requestedFramePosition.current !== null) {
+          const requestedPosition = requestedFramePosition.current;
+          requestedFramePosition.current = null;
+          if (requestedPosition === displayedFramePosition.current) continue;
+          const requested = await window.animationStudy.getFrame(requestedPosition);
+          if (requestedFramePosition.current === null) {
+            setFrame(requested);
+            displayedFramePosition.current = requested.timelinePosition;
+            setTimelinePosition(requested.timelinePosition);
+          }
+        }
+      } catch (caught) {
+        requestedFramePosition.current = null;
+        setError(errorMessage(caught));
+      } finally {
+        frameRequestRunning.current = false;
+        setBusy(false);
+      }
+    })();
+  }, [video]);
+
+  const scrubTimeline = useCallback((clientX: number, element: HTMLDivElement) => {
+    if (!video) return;
+    const bounds = element.getBoundingClientRect();
+    showFrame(timelinePositionFromOffset(clientX - bounds.left, bounds.width, video.playbackFrames.length));
+  }, [showFrame, video]);
 
   const togglePlayback = useCallback(async () => {
     const element = videoElement.current;
@@ -168,6 +193,9 @@ export function App() {
   const pendingCelValue = video ? "Pending analysis" : undefined;
   const readyCel = celInformation?.status === "ready" ? celInformation : null;
   const unavailableCelValue = celInformation?.status === "failed" ? "Unavailable" : pendingCelValue;
+  const playheadPercent = video && video.playbackFrames.length > 1
+    ? (timelinePosition / (video.playbackFrames.length - 1)) * 100
+    : 0;
 
   return (
     <main className="app-shell">
@@ -233,16 +261,38 @@ export function App() {
       <section className="timeline" aria-label="Timeline filmstrip" aria-busy={timelineLoading}>
         {video ? (
           timelineThumbnails.length > 0 ? (
-            <div className="filmstrip">
+            <div
+              className="filmstrip"
+              role="slider"
+              aria-label="Timeline playhead"
+              aria-valuemin={1}
+              aria-valuemax={video.playbackFrames.length}
+              aria-valuenow={timelinePosition + 1}
+              tabIndex={0}
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                scrubTimeline(event.clientX, event.currentTarget);
+              }}
+              onPointerMove={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  scrubTimeline(event.clientX, event.currentTarget);
+                }
+              }}
+              onPointerUp={(event) => {
+                scrubTimeline(event.clientX, event.currentTarget);
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }}
+            >
               {timelineThumbnails.map((thumbnail) => (
                 <figure
                   className={thumbnail.timelinePosition === timelinePosition ? "timeline-thumbnail selected" : "timeline-thumbnail"}
                   key={thumbnail.timelinePosition}
                 >
-                  <img src={thumbnail.imageDataUrl} alt="" />
+                  <img src={thumbnail.imageDataUrl} alt="" draggable={false} />
                   <figcaption>{thumbnail.displayFrameNumber}</figcaption>
                 </figure>
               ))}
+              <div className="timeline-playhead" style={{ left: `${playheadPercent}%` }} aria-hidden="true" />
             </div>
           ) : (
             <p className="timeline-message">{timelineLoading ? "Loading filmstrip" : "Filmstrip unavailable"}</p>

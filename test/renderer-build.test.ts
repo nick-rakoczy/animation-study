@@ -35,3 +35,12 @@ test("timeline thumbnails preserve their image aspect ratio without black contai
   assert.match(imageRule, /height:\s*auto/);
   assert.doesNotMatch(imageRule, /object-fit\s*:/);
 });
+
+test("filmstrip scrubbing maps pointer input to an exact playhead position", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  assert.match(source, /timelinePositionFromOffset/);
+  assert.match(source, /setPointerCapture/);
+  assert.match(source, /onPointerMove/);
+  assert.match(source, /className="timeline-playhead"/);
+  assert.match(source, /aria-valuenow=\{timelinePosition \+ 1\}/);
+});
