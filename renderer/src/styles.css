@@ -43,20 +43,58 @@ button:disabled {
 
 .app-shell {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) 124px auto;
+  grid-template-rows: auto minmax(0, 1fr) 146px auto;
   width: 100%;
   height: 100%;
   background: #17181b;
 }
 
+.timeline-panel {
+  display: grid;
+  grid-template-rows: 30px minmax(0, 1fr);
+  min-width: 0;
+  border-top: 1px solid #303237;
+  background: #151619;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  color: #c5c6c3;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.timeline-density {
+  color: #777b82;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.timeline-scale-controls {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.timeline-scale-controls button {
+  width: 25px;
+  height: 22px;
+  padding: 0;
+  line-height: 18px;
+}
+
 .timeline {
   min-width: 0;
-  padding: 10px 12px;
+  padding: 6px 12px 10px;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-inline: contain;
-  border-top: 1px solid #303237;
-  background: #151619;
 }
 
 .filmstrip {

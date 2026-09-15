@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CelInformation, DisplayFrame, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
 import { timelinePositionAtPlaybackTime } from "../../src/playback.js";
+import { defaultTimelineScaleIndex, nextTimelineScaleIndex, timelineSampleCounts } from "../../src/timeline-scale.js";
 import { timelinePositionFromOffset } from "../../src/timeline-scrub.js";
 
 export function App() {
@@ -11,6 +12,7 @@ export function App() {
   const [celInformation, setCelInformation] = useState<CelInformation | null>(null);
   const [timelineThumbnails, setTimelineThumbnails] = useState<readonly TimelineThumbnail[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineScaleIndex, setTimelineScaleIndex] = useState(defaultTimelineScaleIndex);
   const [showingPlayback, setShowingPlayback] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,6 +39,7 @@ export function App() {
         setTimelinePosition(opened.frame.timelinePosition);
         setCelInformation({ status: "pending" });
         setTimelineThumbnails([]);
+        setTimelineScaleIndex(defaultTimelineScaleIndex);
         setShowingPlayback(false);
         setPlaying(false);
       }
@@ -47,24 +50,30 @@ export function App() {
     }
   }, []);
 
+  const timelineSampleCount = timelineSampleCounts[timelineScaleIndex]!;
+
   useEffect(() => {
     if (!video) return;
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     setTimelineLoading(true);
-    void window.animationStudy.getTimelineThumbnails(12).then(
-      (thumbnails) => {
-        if (!cancelled) setTimelineThumbnails(thumbnails);
-      },
-      (caught) => {
-        if (!cancelled) setError(errorMessage(caught));
-      },
-    ).finally(() => {
-      if (!cancelled) setTimelineLoading(false);
-    });
+    timer = setTimeout(() => {
+      void window.animationStudy.getTimelineThumbnails(timelineSampleCount).then(
+        (thumbnails) => {
+          if (!cancelled) setTimelineThumbnails(thumbnails);
+        },
+        (caught) => {
+          if (!cancelled) setError(errorMessage(caught));
+        },
+      ).finally(() => {
+        if (!cancelled) setTimelineLoading(false);
+      });
+    }, 100);
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [video]);
+  }, [timelineSampleCount, video]);
 
   const showFrame = useCallback((position: number) => {
     if (!video) return;
@@ -106,6 +115,15 @@ export function App() {
     const bounds = element.getBoundingClientRect();
     showFrame(timelinePositionFromOffset(clientX - bounds.left, bounds.width, video.playbackFrames.length));
   }, [showFrame, video]);
+
+  const scaleTimeline = useCallback((direction: -1 | 1) => {
+    if (!video) return;
+    setTimelineScaleIndex((current) => nextTimelineScaleIndex(
+      current,
+      direction,
+      video.playbackFrames.length,
+    ));
+  }, [video]);
 
   const togglePlayback = useCallback(async () => {
     const element = videoElement.current;
@@ -176,15 +194,20 @@ export function App() {
       }
       const previous = event.key === "ArrowLeft" || event.key === ",";
       const next = event.key === "ArrowRight" || event.key === ".";
-      if (previous || next || event.key === "Home" || event.key === "End") event.preventDefault();
+      const timelineShortcutAllowed = !isInteractiveTarget(event.target) && !event.ctrlKey && !event.metaKey && !event.altKey;
+      const scaleIn = event.key === "+" && timelineShortcutAllowed;
+      const scaleOut = event.key === "-" && timelineShortcutAllowed;
+      if (previous || next || scaleIn || scaleOut || event.key === "Home" || event.key === "End") event.preventDefault();
       if (previous) void showFrame(timelinePosition - 1);
       else if (next) void showFrame(timelinePosition + 1);
+      else if (scaleIn) scaleTimeline(1);
+      else if (scaleOut) scaleTimeline(-1);
       else if (event.key === "Home") void showFrame(0);
       else if (event.key === "End") void showFrame(video.playbackFrames.length - 1);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showFrame, timelinePosition, togglePlayback, video]);
+  }, [scaleTimeline, showFrame, timelinePosition, togglePlayback, video]);
 
   const toolDescription = tools?.available
     ? compactVersion(tools.ffmpegVersion)
@@ -196,6 +219,13 @@ export function App() {
   const playheadPercent = video && video.playbackFrames.length > 1
     ? (timelinePosition / (video.playbackFrames.length - 1)) * 100
     : 0;
+  const effectiveSampleCount = video ? Math.min(video.playbackFrames.length, timelineSampleCount) : 0;
+  const previousScaleIndex = video
+    ? nextTimelineScaleIndex(timelineScaleIndex, -1, video.playbackFrames.length)
+    : timelineScaleIndex;
+  const nextScaleIndex = video
+    ? nextTimelineScaleIndex(timelineScaleIndex, 1, video.playbackFrames.length)
+    : timelineScaleIndex;
 
   return (
     <main className="app-shell">
@@ -258,17 +288,32 @@ export function App() {
         </aside>
       </section>
 
-      <section
-        className="timeline"
-        aria-label="Timeline filmstrip"
-        aria-busy={timelineLoading}
-        onWheel={(event) => {
-          if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
-            event.preventDefault();
-            event.currentTarget.scrollLeft += event.deltaY;
-          }
-        }}
-      >
+      <section className="timeline-panel" aria-label="Timeline filmstrip" aria-busy={timelineLoading}>
+        <header className="timeline-header">
+          <span>Timeline</span>
+          <span className="timeline-density">{effectiveSampleCount} {effectiveSampleCount === 1 ? "sample" : "samples"}</span>
+          <div className="timeline-scale-controls" aria-label="Timeline scale controls">
+            <button
+              aria-label="Decrease timeline scale"
+              disabled={!video || previousScaleIndex === timelineScaleIndex}
+              onClick={() => scaleTimeline(-1)}
+            >−</button>
+            <button
+              aria-label="Increase timeline scale"
+              disabled={!video || nextScaleIndex === timelineScaleIndex}
+              onClick={() => scaleTimeline(1)}
+            >+</button>
+          </div>
+        </header>
+        <div
+          className="timeline"
+          onWheel={(event) => {
+            if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+              event.preventDefault();
+              event.currentTarget.scrollLeft += event.deltaY;
+            }
+          }}
+        >
         {video ? (
           timelineThumbnails.length > 0 ? (
             <div
@@ -310,6 +355,7 @@ export function App() {
         ) : (
           <p className="timeline-message">Timeline</p>
         )}
+        </div>
       </section>
 
       <footer className="transport">

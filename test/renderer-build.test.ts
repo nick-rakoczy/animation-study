@@ -20,7 +20,7 @@ test("frame information panel includes completed and pending cel fields", async 
 test("renderer includes the sampled timeline filmstrip", async () => {
   const source = await readFile("renderer/src/App.tsx", "utf8");
   assert.match(source, /aria-label="Timeline filmstrip"/);
-  assert.match(source, /getTimelineThumbnails\(12\)/);
+  assert.match(source, /getTimelineThumbnails\(timelineSampleCount\)/);
   assert.match(source, /timelineThumbnails\.map/);
 });
 
@@ -52,4 +52,13 @@ test("filmstrip scrolls horizontally without compressing thumbnails", async () =
   assert.match(styles, /overflow-x:\s*auto/);
   assert.match(styles, /width:\s*max-content/);
   assert.match(styles, /flex:\s*0 0 auto/);
+});
+
+test("timeline scale controls and shortcuts change sample density", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  assert.match(source, /aria-label="Decrease timeline scale"/);
+  assert.match(source, /aria-label="Increase timeline scale"/);
+  assert.match(source, /event\.key === "\+"/);
+  assert.match(source, /event\.key === "-"/);
+  assert.match(source, /getTimelineThumbnails\(timelineSampleCount\)/);
 });
