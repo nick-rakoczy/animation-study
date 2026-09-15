@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Accessible focus behavior and complete keyboard coverage.
+Export one opaque PNG for each exposure present in an inclusive selection.
 
 ## Phase 0: decisions and technical proofs
 
@@ -76,8 +76,8 @@ Accessible focus behavior and complete keyboard coverage.
 - [x] Add `Shift+Left` and `Shift+Right` cel navigation.
 - [x] Add split, merge, representative-frame selection, and boundary confirmation.
 - [x] Add undo and redo for every correction.
-- [ ] Add accessible focus behavior and complete keyboard coverage.
-- [ ] Keep the interface responsive while background analysis runs.
+- [x] Add accessible focus behavior and complete keyboard coverage.
+- [x] Keep the interface responsive while background analysis runs.
 
 ## Phase 4: export
 
@@ -148,12 +148,14 @@ Accessible focus behavior and complete keyboard coverage.
 | 2026-09-14 | Adjacent-cel navigation tests | Resolved previous and next exposure starts from any frame in a hold, stopped at file boundaries, and bound the actions to shifted arrow keys |
 | 2026-09-14 | Exposure correction tests | Split and merged spans, changed representative frames, confirmed uncertain boundaries as held or changed, reindexed chronological cels, and exposed guarded controls in the information panel |
 | 2026-09-14 | Correction history tests | Undid and redid complete exposure timelines across representative, split, and merge edits; cleared redo after a new correction; and added buttons plus standard keyboard shortcuts |
+| 2026-09-14 | Accessibility and keyboard tests | Moved focus to the timeline after opening without overriding later user focus, focused the timeline on pointer use, exposed slider values and shortcuts, preserved native control keys, and tested every application shortcut through one mapping |
+| 2026-09-14 | Responsive background analysis tests | Exposed live analysis stages and progress through typed IPC, kept analysis separate from interaction busy state, and retrieved an exact frame while analysis was pending or completing |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
 - Timeline ranges and exposure corrections are session-only until export and project correction persistence are implemented.
-- Analysis progress is not shown in the interface yet. Export does not exist yet.
+- Export does not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

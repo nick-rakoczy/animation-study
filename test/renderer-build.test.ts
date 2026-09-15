@@ -58,8 +58,9 @@ test("timeline scale controls and shortcuts change sample density", async () => 
   const source = await readFile("renderer/src/App.tsx", "utf8");
   assert.match(source, /aria-label="Decrease timeline scale"/);
   assert.match(source, /aria-label="Increase timeline scale"/);
-  assert.match(source, /event\.key === "\+"/);
-  assert.match(source, /event\.key === "-"/);
+  assert.match(source, /appKeyboardAction/);
+  assert.match(source, /aria-keyshortcuts="\+"/);
+  assert.match(source, /aria-keyshortcuts="-"/);
   assert.match(source, /getTimelineThumbnails\(timelineSampleCount\)/);
 });
 
@@ -74,10 +75,9 @@ test("timeline supports inclusive pointer range selection", async () => {
 
 test("shifted arrow keys navigate adjacent cels", async () => {
   const source = await readFile("renderer/src/App.tsx", "utf8");
-  assert.match(source, /event\.key === "ArrowLeft" && event\.shiftKey/);
-  assert.match(source, /event\.key === "ArrowRight" && event\.shiftKey/);
-  assert.match(source, /navigateCel\("previous"\)/);
-  assert.match(source, /navigateCel\("next"\)/);
+  assert.match(source, /action === "previous-cel"/);
+  assert.match(source, /action === "next-cel"/);
+  assert.match(source, /navigateCel\(action === "previous-cel" \? "previous" : "next"\)/);
   assert.match(source, /getAdjacentCelPosition/);
 });
 
@@ -97,6 +97,26 @@ test("exposure corrections have undo and redo controls and shortcuts", async () 
   assert.match(source, /redoExposureCorrection/);
   assert.match(source, /readyCorrection\?\.canUndo/);
   assert.match(source, /readyCorrection\?\.canRedo/);
-  assert.match(source, /event\.key\.toLowerCase\(\) === "z"/);
-  assert.match(source, /event\.key\.toLowerCase\(\) === "y"/);
+  assert.match(source, /action === "undo-correction"/);
+  assert.match(source, /action === "redo-correction"/);
+});
+
+test("renderer provides focus movement and accessible keyboard semantics", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  const styles = await readFile("renderer/src/styles.css", "utf8");
+  assert.match(source, /filmstrip\.current\?\.focus\(\)/);
+  assert.match(source, /event\.currentTarget\.focus\(\)/);
+  assert.match(source, /aria-valuetext=/);
+  assert.match(source, /aria-keyshortcuts=/);
+  assert.match(source, /<dl className="info-list">/);
+  assert.match(source, /<output className="frame-readout" aria-live=\{playing \? "off" : "polite"\}/);
+  assert.match(styles, /:focus-visible/);
+});
+
+test("renderer reports background analysis without blocking controls", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  assert.match(source, /getBackgroundAnalysisStatus/);
+  assert.match(source, /role="status" aria-live="polite"/);
+  assert.match(source, /<progress aria-label="Background exposure analysis"/);
+  assert.doesNotMatch(source, /setBusy\(analysisStatus/);
 });

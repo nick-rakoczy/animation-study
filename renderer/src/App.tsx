@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CelInformation, CorrectionInformation, DisplayFrame, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
+import type { BackgroundAnalysisStatus, CelInformation, CorrectionInformation, DisplayFrame, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
+import type { AnalysisJobStage } from "../../src/analysis-job.js";
 import type { ExposureCorrectionAction } from "../../src/exposure-correction.js";
+import { appKeyboardAction } from "../../src/keyboard-shortcuts.js";
 import { timelinePositionAtPlaybackTime } from "../../src/playback.js";
 import { createInclusiveTimelineRange, timelineRangeFractions, type InclusiveTimelineRange } from "../../src/timeline-range.js";
 import { defaultTimelineScaleIndex, nextTimelineScaleIndex, timelineSampleCounts } from "../../src/timeline-scale.js";
@@ -15,6 +17,7 @@ export function App() {
   const [correctionInformation, setCorrectionInformation] = useState<CorrectionInformation | null>(null);
   const [correctionRevision, setCorrectionRevision] = useState(0);
   const [correctionBusy, setCorrectionBusy] = useState(false);
+  const [analysisStatus, setAnalysisStatus] = useState<BackgroundAnalysisStatus | null>(null);
   const [timelineThumbnails, setTimelineThumbnails] = useState<readonly TimelineThumbnail[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineScaleIndex, setTimelineScaleIndex] = useState(defaultTimelineScaleIndex);
@@ -25,6 +28,9 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const videoElement = useRef<HTMLVideoElement>(null);
+  const openButton = useRef<HTMLButtonElement>(null);
+  const filmstrip = useRef<HTMLDivElement>(null);
+  const focusTimelineWhenReady = useRef(false);
   const displayedFramePosition = useRef(0);
   const requestedFramePosition = useRef<number | null>(null);
   const frameRequestRunning = useRef(false);
@@ -47,6 +53,7 @@ export function App() {
         setTimelinePosition(opened.frame.timelinePosition);
         setCelInformation({ status: "pending" });
         setCorrectionInformation({ status: "pending" });
+        setAnalysisStatus({ status: "running", progress: null });
         setCorrectionRevision(0);
         setTimelineThumbnails([]);
         setTimelineScaleIndex(defaultTimelineScaleIndex);
@@ -55,6 +62,7 @@ export function App() {
         timelineRangeAnchor.current = null;
         setShowingPlayback(false);
         setPlaying(false);
+        focusTimelineWhenReady.current = true;
       }
     } catch (caught) {
       setError(errorMessage(caught));
@@ -87,6 +95,37 @@ export function App() {
       if (timer) clearTimeout(timer);
     };
   }, [timelineSampleCount, video]);
+
+  useEffect(() => {
+    if (!focusTimelineWhenReady.current || timelineThumbnails.length === 0) return;
+    focusTimelineWhenReady.current = false;
+    const activeElement = document.activeElement;
+    if (activeElement === document.body || activeElement === openButton.current) filmstrip.current?.focus();
+  }, [timelineThumbnails]);
+
+  useEffect(() => {
+    if (!video) {
+      setAnalysisStatus(null);
+      return;
+    }
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      try {
+        const result = await window.animationStudy.getBackgroundAnalysisStatus();
+        if (cancelled) return;
+        setAnalysisStatus(result);
+        if (result.status === "running") retry = setTimeout(() => void refresh(), 200);
+      } catch (caught) {
+        if (!cancelled) setAnalysisStatus({ status: "failed", error: errorMessage(caught) });
+      }
+    };
+    void refresh();
+    return () => {
+      cancelled = true;
+      if (retry) clearTimeout(retry);
+    };
+  }, [video]);
 
   const showFrame = useCallback((position: number) => {
     if (!video) return;
@@ -282,37 +321,27 @@ export function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!video) return;
-      if (event.key === " " && !isInteractiveTarget(event.target)) {
-        event.preventDefault();
-        void togglePlayback();
-        return;
-      }
-      const historyShortcutAllowed = !isInteractiveTarget(event.target) && (event.ctrlKey || event.metaKey) && !event.altKey;
-      const undoCorrection = event.key.toLowerCase() === "z" && !event.shiftKey && historyShortcutAllowed;
-      const redoCorrection = (
-        event.key.toLowerCase() === "y" || event.key.toLowerCase() === "z" && event.shiftKey
-      ) && historyShortcutAllowed;
-      if (undoCorrection || redoCorrection) {
-        event.preventDefault();
-        void moveCorrectionHistory(undoCorrection ? "undo" : "redo");
-        return;
-      }
-      const timelineShortcutAllowed = !isInteractiveTarget(event.target) && !event.ctrlKey && !event.metaKey && !event.altKey;
-      const previousCel = event.key === "ArrowLeft" && event.shiftKey && timelineShortcutAllowed;
-      const nextCel = event.key === "ArrowRight" && event.shiftKey && timelineShortcutAllowed;
-      const previous = (event.key === "ArrowLeft" && !event.shiftKey || event.key === ",") && timelineShortcutAllowed;
-      const next = (event.key === "ArrowRight" && !event.shiftKey || event.key === ".") && timelineShortcutAllowed;
-      const scaleIn = event.key === "+" && timelineShortcutAllowed;
-      const scaleOut = event.key === "-" && timelineShortcutAllowed;
-      if (previousCel || nextCel || previous || next || scaleIn || scaleOut || event.key === "Home" || event.key === "End") event.preventDefault();
-      if (previousCel) void navigateCel("previous");
-      else if (nextCel) void navigateCel("next");
-      else if (previous) void showFrame(timelinePosition - 1);
-      else if (next) void showFrame(timelinePosition + 1);
-      else if (scaleIn) scaleTimeline(1);
-      else if (scaleOut) scaleTimeline(-1);
-      else if (event.key === "Home") void showFrame(0);
-      else if (event.key === "End") void showFrame(video.playbackFrames.length - 1);
+      const action = appKeyboardAction({
+        key: event.key,
+        shiftKey: event.shiftKey,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        altKey: event.altKey,
+        interactiveTarget: isInteractiveTarget(event.target),
+      });
+      if (!action) return;
+      event.preventDefault();
+      if (action === "toggle-playback") void togglePlayback();
+      else if (action === "undo-correction" || action === "redo-correction") {
+        void moveCorrectionHistory(action === "undo-correction" ? "undo" : "redo");
+      } else if (action === "previous-cel" || action === "next-cel") {
+        void navigateCel(action === "previous-cel" ? "previous" : "next");
+      } else if (action === "previous-frame") void showFrame(timelinePosition - 1);
+      else if (action === "next-frame") void showFrame(timelinePosition + 1);
+      else if (action === "first-frame") void showFrame(0);
+      else if (action === "last-frame") void showFrame(video.playbackFrames.length - 1);
+      else if (action === "increase-timeline-scale") scaleTimeline(1);
+      else if (action === "decrease-timeline-scale") scaleTimeline(-1);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -339,15 +368,30 @@ export function App() {
   const rangeFractions = video && timelineRange
     ? timelineRangeFractions(timelineRange, video.playbackFrames.length)
     : null;
+  const analysisProgress = analysisStatus?.status === "running" ? analysisStatus.progress : null;
+  const analysisPercent = analysisProgress ? Math.round(analysisProgress.fraction * 100) : null;
+  const analysisDescription = analysisStatus?.status === "ready"
+    ? analysisStatus.loadedFromSidecar ? "Analysis loaded" : "Analysis complete"
+    : analysisStatus?.status === "failed"
+      ? `Analysis failed: ${analysisStatus.error}`
+      : analysisPercent === null ? "Starting analysis" : `${analysisStageLabel(analysisProgress!.stage)} ${analysisPercent}%`;
 
   return (
     <main className="app-shell">
       <header className="top-bar">
         <div>
           <h1>Animation Study</h1>
-          <p className={tools?.available ? "tool-status" : "tool-status tool-error"}>{toolDescription}</p>
+          <p className={tools?.available ? "tool-status" : "tool-status tool-error"} role="status">{toolDescription}</p>
+          {video ? (
+            <div className={analysisStatus?.status === "failed" ? "analysis-status tool-error" : "analysis-status"} role="status" aria-live="polite">
+              <span>{analysisDescription}</span>
+              {analysisStatus?.status === "running" ? (
+                <progress aria-label="Background exposure analysis" max={1} value={analysisProgress?.fraction ?? undefined} />
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        <button className="open-button" disabled={busy || tools?.available !== true} onClick={() => void openVideo()}>
+        <button ref={openButton} className="open-button" disabled={busy || tools?.available !== true} onClick={() => void openVideo()}>
           {busy && !video ? "Opening..." : "Open video"}
         </button>
       </header>
@@ -383,6 +427,7 @@ export function App() {
 
         <aside className="information" aria-label="Frame information">
           <h2>Frame information</h2>
+          <dl className="info-list">
           <Info label="File" value={video?.sourceName} />
           <Info label="Timeline frame" value={selectedTiming ? `${selectedTiming.displayFrameNumber} of ${video?.playbackFrames.length}` : undefined} />
           <Info label="Source timestamp" value={selectedTiming ? formatRationalSeconds(selectedTiming.presentationTimestamp) : undefined} />
@@ -398,14 +443,17 @@ export function App() {
           <Info label="Hold length" value={readyCel ? `${readyCel.holdLengthFrames} ${readyCel.holdLengthFrames === 1 ? "frame" : "frames"}` : unavailableCelValue} />
           <Info label="Cadence" value={readyCel?.cadenceLabel ?? unavailableCelValue} />
           <Info label="Elapsed duration" value={readyCel ? formatRationalSeconds(readyCel.elapsedDuration) : unavailableCelValue} />
+          </dl>
           <section className="corrections" aria-label="Exposure corrections">
             <h2>Corrections</h2>
             <div className="correction-history-buttons">
               <button
+                aria-keyshortcuts="Control+Z Meta+Z"
                 disabled={!readyCorrection?.canUndo || correctionBusy}
                 onClick={() => void moveCorrectionHistory("undo")}
               >Undo</button>
               <button
+                aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y"
                 disabled={!readyCorrection?.canRedo || correctionBusy}
                 onClick={() => void moveCorrectionHistory("redo")}
               >Redo</button>
@@ -457,6 +505,7 @@ export function App() {
           </span>
           <div className="timeline-range-controls">
             <button
+              title="Select a range with pointer drag, or hold Shift while dragging"
               aria-pressed={rangeSelectionMode}
               disabled={!video}
               onClick={() => setRangeSelectionMode((active) => !active)}
@@ -470,11 +519,13 @@ export function App() {
           <div className="timeline-scale-controls" aria-label="Timeline scale controls">
             <button
               aria-label="Decrease timeline scale"
+              aria-keyshortcuts="-"
               disabled={!video || previousScaleIndex === timelineScaleIndex}
               onClick={() => scaleTimeline(-1)}
             >−</button>
             <button
               aria-label="Increase timeline scale"
+              aria-keyshortcuts="+"
               disabled={!video || nextScaleIndex === timelineScaleIndex}
               onClick={() => scaleTimeline(1)}
             >+</button>
@@ -492,14 +543,18 @@ export function App() {
         {video ? (
           timelineThumbnails.length > 0 ? (
             <div
+              ref={filmstrip}
               className={rangeSelectionMode ? "filmstrip selecting-range" : "filmstrip"}
               role="slider"
               aria-label="Timeline playhead"
               aria-valuemin={1}
               aria-valuemax={video.playbackFrames.length}
               aria-valuenow={timelinePosition + 1}
+              aria-valuetext={`Frame ${timelinePosition + 1} of ${video.playbackFrames.length}`}
+              aria-keyshortcuts="ArrowLeft ArrowRight Home End Shift+ArrowLeft Shift+ArrowRight"
               tabIndex={0}
               onPointerDown={(event) => {
+                event.currentTarget.focus();
                 event.currentTarget.setPointerCapture(event.pointerId);
                 const position = timelinePositionForPointer(event.clientX, event.currentTarget);
                 if (position === null) return;
@@ -559,12 +614,12 @@ export function App() {
       </section>
 
       <footer className="transport">
-        <button aria-label="First frame" disabled={!video || busy || timelinePosition === 0} onClick={() => void showFrame(0)}>│◀</button>
-        <button aria-label="Previous frame" disabled={!video || busy || timelinePosition === 0} onClick={() => void showFrame(timelinePosition - 1)}>◀</button>
-        <button className="play-button" aria-label={playing ? "Pause" : "Play"} disabled={!video || busy} onClick={() => void togglePlayback()}>{playing ? "❚❚" : "▶"}</button>
-        <div className="frame-readout">{selectedTiming ? selectedTiming.displayFrameNumber.toString().padStart(6, "0") : "------"}</div>
-        <button aria-label="Next frame" disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => void showFrame(timelinePosition + 1)}>▶</button>
-        <button aria-label="Last frame" disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => video && void showFrame(video.playbackFrames.length - 1)}>▶│</button>
+        <button aria-label="First frame" aria-keyshortcuts="Home" disabled={!video || busy || timelinePosition === 0} onClick={() => void showFrame(0)}>│◀</button>
+        <button aria-label="Previous frame" aria-keyshortcuts="ArrowLeft ," disabled={!video || busy || timelinePosition === 0} onClick={() => void showFrame(timelinePosition - 1)}>◀</button>
+        <button className="play-button" aria-label={playing ? "Pause" : "Play"} aria-keyshortcuts="Space" disabled={!video || busy} onClick={() => void togglePlayback()}>{playing ? "❚❚" : "▶"}</button>
+        <output className="frame-readout" aria-live={playing ? "off" : "polite"} aria-atomic="true">{selectedTiming ? selectedTiming.displayFrameNumber.toString().padStart(6, "0") : "------"}</output>
+        <button aria-label="Next frame" aria-keyshortcuts="ArrowRight ." disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => void showFrame(timelinePosition + 1)}>▶</button>
+        <button aria-label="Last frame" aria-keyshortcuts="End" disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => video && void showFrame(video.playbackFrames.length - 1)}>▶│</button>
       </footer>
 
       {error ? <div className="error-banner" role="alert">{error}</div> : null}
@@ -580,9 +635,15 @@ function Info({ label, value, title }: {
   return (
     <div className="info-row">
       <dt>{label}</dt>
-      <dd title={title}>{value ?? "—"}</dd>
+      <dd title={title}>{value ?? "-"}</dd>
     </div>
   );
+}
+
+function analysisStageLabel(stage: AnalysisJobStage): string {
+  if (stage === "analysis-proxy") return "Preparing analysis";
+  if (stage === "luma-chroma-scores") return "Comparing color";
+  return "Comparing edges";
 }
 
 function compactVersion(version: string | null): string {

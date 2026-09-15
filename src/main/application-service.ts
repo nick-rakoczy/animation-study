@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
-import { AnalysisCancelledError } from "../analysis-job.js";
+import { AnalysisCancelledError, type AnalysisJobProgress } from "../analysis-job.js";
 import { AnalysisProject } from "../analysis-project.js";
 import { AnalysisProxyCache } from "../analysis-proxy.js";
 import { AnalysisScoreCache } from "../analysis-score.js";
@@ -14,7 +14,7 @@ import { FrameProxyCache } from "../frame-cache.js";
 import { createPlaybackFrames } from "../playback.js";
 import { PlaybackProxy } from "../playback-proxy.js";
 import { probeVideo } from "../probe.js";
-import type { CelInformation, CelNavigationResult, CorrectionInformation, DisplayFrame, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
+import type { BackgroundAnalysisStatus, CelInformation, CelNavigationResult, CorrectionInformation, DisplayFrame, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
 import type { NormalizedTiming } from "../timing.js";
 
 interface VideoSession {
@@ -27,6 +27,8 @@ interface VideoSession {
   readonly thumbnailAbortController: AbortController;
   analysisTimeline: ExposureTimeline | null;
   analysisError: string | null;
+  analysisProgress: AnalysisJobProgress | null;
+  analysisLoadedFromSidecar: boolean | null;
   readonly correctionUndoStack: ExposureTimeline[];
   readonly correctionRedoStack: ExposureTimeline[];
 }
@@ -70,6 +72,8 @@ export class ApplicationService {
       thumbnailAbortController: new AbortController(),
       analysisTimeline: null,
       analysisError: null,
+      analysisProgress: null,
+      analysisLoadedFromSidecar: null,
       correctionUndoStack: [],
       correctionRedoStack: [],
     };
@@ -103,6 +107,16 @@ export class ApplicationService {
       presentationDuration: timing.presentationDuration,
       imageDataUrl: `data:image/png;base64,${image.toString("base64")}`,
     };
+  }
+
+  getBackgroundAnalysisStatus(): BackgroundAnalysisStatus {
+    const session = this.#session;
+    if (!session) throw new Error("Open a video before requesting analysis status");
+    if (session.analysisError) return { status: "failed", error: session.analysisError };
+    if (session.analysisTimeline) {
+      return { status: "ready", loadedFromSidecar: session.analysisLoadedFromSidecar ?? false };
+    }
+    return { status: "running", progress: session.analysisProgress };
   }
 
   async getCelInformation(timelinePosition: number): Promise<CelInformation> {
@@ -211,8 +225,11 @@ export class ApplicationService {
       const identity = await proxyCache.identity();
       const project = new AnalysisProject(session.sourcePath);
       const resolved = await project.loadCompletedOrAnalyze(identity, async () => {
-        const proxy = await proxyCache.create(signal);
-        const scores = await new AnalysisScoreCache(proxy).create(signal);
+        const reportProgress = (progress: AnalysisJobProgress) => {
+          if (!signal.aborted) session.analysisProgress = progress;
+        };
+        const proxy = await proxyCache.create(signal, reportProgress);
+        const scores = await new AnalysisScoreCache(proxy).create(signal, reportProgress);
         const analysis = new AnalysisSensitivity(defaultAnalysisSensitivity).analyze(scores);
         return {
           scores,
@@ -220,7 +237,10 @@ export class ApplicationService {
           sensitivity: analysis.sensitivity,
         };
       });
-      if (!signal.aborted) session.analysisTimeline = resolved.snapshot.timeline;
+      if (!signal.aborted) {
+        session.analysisTimeline = resolved.snapshot.timeline;
+        session.analysisLoadedFromSidecar = resolved.loadedFromSidecar;
+      }
     } catch (error) {
       if (signal.aborted || error instanceof AnalysisCancelledError) return;
       session.analysisError = error instanceof Error ? error.message : String(error);

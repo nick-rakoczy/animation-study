@@ -448,6 +448,11 @@ test("opens the viewer with pending cel data and fills it after background analy
   assert.equal(opened.frame.displayFrameNumber, 1);
   assert.deepEqual(await service.getCelInformation(0), { status: "pending" });
 
+  const statusWhileUsable = service.getBackgroundAnalysisStatus();
+  assert.ok(statusWhileUsable.status === "running" || statusWhileUsable.status === "ready");
+  const frameDuringAnalysis = await service.getFrame(3);
+  assert.equal(frameDuringAnalysis.displayFrameNumber, 4);
+
   const thumbnails = await service.getTimelineThumbnails(3);
   assert.deepEqual(thumbnails.map(({ timelinePosition, displayFrameNumber }) => ({ timelinePosition, displayFrameNumber })), [
     { timelinePosition: 0, displayFrameNumber: 1 },
@@ -457,6 +462,7 @@ test("opens the viewer with pending cel data and fills it after background analy
   assert.ok(thumbnails.every((thumbnail) => thumbnail.imageDataUrl.startsWith("data:image/png;base64,")));
 
   const firstCel = await waitForCelInformation(service, 1);
+  assert.equal(service.getBackgroundAnalysisStatus().status, "ready");
   assert.deepEqual(firstCel, {
     status: "ready",
     displayCelNumber: 1,

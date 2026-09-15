@@ -1,5 +1,6 @@
 import type { Rational } from "./rational.js";
 import type { ExposureCorrectionAction, ExposureCorrectionState } from "./exposure-correction.js";
+import type { AnalysisJobProgress } from "./analysis-job.js";
 
 export interface MediaToolStatus {
   readonly available: boolean;
@@ -65,10 +66,16 @@ export type CorrectionInformation =
   | { readonly status: "failed"; readonly error: string }
   | ({ readonly status: "ready"; readonly canUndo: boolean; readonly canRedo: boolean } & ExposureCorrectionState);
 
+export type BackgroundAnalysisStatus =
+  | { readonly status: "running"; readonly progress: AnalysisJobProgress | null }
+  | { readonly status: "ready"; readonly loadedFromSidecar: boolean }
+  | { readonly status: "failed"; readonly error: string };
+
 export interface AnimationStudyApi {
   getMediaToolStatus(): Promise<MediaToolStatus>;
   openVideo(): Promise<OpenVideoResult | null>;
   getFrame(timelinePosition: number): Promise<DisplayFrame>;
+  getBackgroundAnalysisStatus(): Promise<BackgroundAnalysisStatus>;
   getCelInformation(timelinePosition: number): Promise<CelInformation>;
   getAdjacentCelPosition(timelinePosition: number, direction: "previous" | "next"): Promise<CelNavigationResult>;
   getCorrectionInformation(timelinePosition: number): Promise<CorrectionInformation>;
