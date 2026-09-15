@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyBoundaries } from "../src/boundary-classifier.js";
+import { buildExposureSpans } from "../src/exposure-span.js";
 import type { AnalysisScores, FrameComponentScore } from "../src/analysis-score.js";
 
 test("classifies adjacent boundaries with an uncertain interval between two thresholds", () => {
@@ -31,6 +32,58 @@ test("accepts threshold overrides and rejects an empty uncertain interval", () =
     () => classifyBoundaries(scores, { sameThreshold: 0.04, changedThreshold: 0.04 }),
     /same threshold must be lower/,
   );
+});
+
+test("builds chronological spans without merging a returning drawing", () => {
+  const classified = classifyBoundaries(scoresWithBoundaries([
+    boundary(0, 0, 0, 0),
+    boundary(1, 0.1, 0, 0),
+    boundary(2, 0, 0, 0),
+    boundary(3, 0.1, 0, 0),
+    boundary(4, 0, 0, 0),
+  ]));
+  const timeline = buildExposureSpans(classified);
+
+  assert.deepEqual(timeline.spans.map((span) => [
+    span.id,
+    span.startTimelinePosition,
+    span.endTimelinePosition,
+    span.frameCount,
+    span.representativeTimelinePosition,
+  ]), [
+    ["exposure-00000000", 0, 1, 2, 0],
+    ["exposure-00000001", 2, 3, 2, 2],
+    ["exposure-00000002", 4, 5, 2, 4],
+  ]);
+  assert.deepEqual(timeline.spans.map((span) => span.displayCelNumber), [1, 2, 3]);
+});
+
+test("keeps uncertain boundaries in the provisional span and flags them for review", () => {
+  const classified = classifyBoundaries(scoresWithBoundaries([
+    boundary(0, 0, 0, 0),
+    boundary(1, 0.02, 0, 0),
+    boundary(2, 0, 0, 0),
+  ]));
+  const timeline = buildExposureSpans(classified);
+
+  assert.deepEqual(timeline.spans.map((span) => [span.startTimelinePosition, span.endTimelinePosition]), [[0, 3]]);
+  assert.deepEqual(timeline.reviewBoundaries.map((item) => [
+    item.fromTimelinePosition,
+    item.toTimelinePosition,
+  ]), [[1, 2]]);
+});
+
+test("builds one exposure for a single-frame source", () => {
+  const timeline = buildExposureSpans(classifyBoundaries(scoresWithBoundaries([])));
+  assert.deepEqual(timeline.spans, [{
+    id: "exposure-00000000",
+    exposureIndex: 0,
+    displayCelNumber: 1,
+    startTimelinePosition: 0,
+    endTimelinePosition: 0,
+    frameCount: 1,
+    representativeTimelinePosition: 0,
+  }]);
 });
 
 function boundary(
