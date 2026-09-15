@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { AnalysisProxyCache } from "../src/analysis-proxy.js";
 import { AnalysisScoreCache } from "../src/analysis-score.js";
+import { classifyBoundaries } from "../src/boundary-classifier.js";
 import { createContactSheet } from "../src/contact-sheet.js";
 import { FrameProxyCache } from "../src/frame-cache.js";
 import { PlaybackProxy } from "../src/playback-proxy.js";
@@ -361,6 +362,10 @@ test("creates cached luma, chroma, and edge analysis proxies", async (context) =
   assert.deepEqual(JSON.parse(await readFile(scorePath, "utf8")), scores);
   assert.deepEqual(await scoreCache.create(), scores);
   assert.equal((await stat(scorePath)).mtimeMs, scoreModifiedTime);
+  assert.deepEqual(
+    classifyBoundaries(scores).boundaries.map((boundary) => boundary.classification),
+    ["changed", "changed"],
+  );
 
   const alternateCache = new AnalysisProxyCache({
     sourcePath,
