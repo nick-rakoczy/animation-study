@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, stat } from "node:fs/promises";
+import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 import { createContactSheet } from "../src/contact-sheet.js";
+import { FrameProxyCache } from "../src/frame-cache.js";
 import { probeVideo } from "../src/probe.js";
 
 const execFileAsync = promisify(execFile);
@@ -46,4 +47,29 @@ test("probes a real 24000/1001 video and creates a contact sheet", async (contex
   });
   assert.deepEqual(sheet.sampledTimelinePositions, [0, 2, 3, 5]);
   assert.ok((await stat(contactSheetPath)).size > 0);
+
+  const frameCache = new FrameProxyCache({
+    sourcePath: videoPath,
+    timing,
+    cacheRoot: directory,
+    widthLimit: 160,
+    prefetchRadius: 1,
+    maxEntries: 3,
+  });
+  const cachedFrame = await frameCache.getFrame(3);
+  const referenceFramePath = join(directory, "reference.png");
+  await execFileAsync("ffmpeg", [
+    "-v", "error",
+    "-i", videoPath,
+    "-vf", "select='eq(n\\,3)',scale=w='min(iw,160)':h='min(ih,160)':force_original_aspect_ratio=decrease:force_divisible_by=2",
+    "-frames:v", "1",
+    "-fps_mode", "passthrough",
+    "-y",
+    referenceFramePath,
+  ]);
+  assert.deepEqual(await readFile(cachedFrame.path), await readFile(referenceFramePath));
+
+  await frameCache.getFrame(0);
+  assert.ok(frameCache.cachedPositions().length <= 3);
+  await frameCache.clear();
 });

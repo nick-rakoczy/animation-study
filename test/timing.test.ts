@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chooseSamplePositions } from "../src/contact-sheet.js";
+import { rationalToDecimal } from "../src/rational.js";
 import { normalizeTiming, type RawProbe } from "../src/timing.js";
 
 test("maps constant-rate frames to zero-based positions and exact rational timing", () => {
@@ -59,6 +60,11 @@ test("accepts the frame duration field emitted by FFmpeg 9", () => {
 test("samples both ends without duplicate frame positions", () => {
   assert.deepEqual(chooseSamplePositions(101, 5), [0, 25, 50, 75, 100]);
   assert.deepEqual(chooseSamplePositions(3, 25), [0, 1, 2]);
+});
+
+test("formats rational seek positions without floating-point conversion", () => {
+  assert.equal(rationalToDecimal({ numerator: "1001", denominator: "24000" }, 12), "0.041708333333");
+  assert.equal(rationalToDecimal({ numerator: "-1", denominator: "2" }, 3), "-0.500");
 });
 
 function probeWithFrames(

@@ -45,6 +45,21 @@ export function rationalToSeconds(value: Rational): number {
   return Number(value.numerator) / Number(value.denominator);
 }
 
+export function rationalToDecimal(value: Rational, decimalPlaces: number): string {
+  if (!Number.isSafeInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 30) {
+    throw new Error("decimalPlaces must be an integer from 0 through 30");
+  }
+  const numerator = BigInt(value.numerator);
+  const denominator = BigInt(value.denominator);
+  const sign = numerator < 0n ? "-" : "";
+  const magnitude = numerator < 0n ? -numerator : numerator;
+  const whole = magnitude / denominator;
+  if (decimalPlaces === 0) return `${sign}${whole}`;
+  const scale = 10n ** BigInt(decimalPlaces);
+  const fraction = ((magnitude % denominator) * scale) / denominator;
+  return `${sign}${whole}.${fraction.toString().padStart(decimalPlaces, "0")}`;
+}
+
 function normalizeRational(numerator: bigint, denominator: bigint): Rational {
   if (denominator === 0n) throw new Error("A rational denominator cannot be zero");
   if (denominator < 0n) {
