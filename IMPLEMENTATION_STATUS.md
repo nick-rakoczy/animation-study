@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Horizontal timeline scrolling.
+Timeline scale controls.
 
 ## Phase 0: decisions and technical proofs
 
@@ -70,7 +70,7 @@ Horizontal timeline scrolling.
 - [x] Add the sampled filmstrip timeline.
 - [x] Keep thumbnail aspect ratios without black thumbnail containers.
 - [x] Add exact playhead scrubbing across sampled thumbnails.
-- [ ] Add horizontal timeline scrolling.
+- [x] Add horizontal timeline scrolling.
 - [ ] Add `+` and `-` timeline scale controls.
 - [ ] Add inclusive timeline range selection.
 - [ ] Add `Shift+Left` and `Shift+Right` cel navigation.
@@ -142,12 +142,13 @@ Horizontal timeline scrolling.
 | 2026-09-14 | Sampled filmstrip timeline tests | Requested a bounded sample across the source, returned the first and last source frames with numbered PNG data URLs, and rendered the samples below the viewer |
 | 2026-09-14 | Filmstrip thumbnail layout test | Kept each image at its intrinsic aspect ratio, removed cover cropping, and removed black thumbnail container fills |
 | 2026-09-14 | Exact timeline scrubbing tests | Mapped the full filmstrip width to clamped integer source-frame positions, tracked pointer drags, and queued the newest exact frame while decoding |
+| 2026-09-14 | Horizontal filmstrip scrolling test | Kept thumbnails at a fixed display height in a content-width row, enabled native horizontal overflow, and mapped vertical wheel input to horizontal movement |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
-- The filmstrip has a fixed sample count and does not yet support scrolling or scale controls.
+- The filmstrip has a fixed sample count and does not yet support scale controls.
 - Analysis progress is not shown in the interface yet. Timeline corrections and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

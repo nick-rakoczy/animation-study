@@ -31,8 +31,8 @@ test("timeline thumbnails preserve their image aspect ratio without black contai
   assert.ok(thumbnailRule);
   assert.ok(imageRule);
   assert.doesNotMatch(thumbnailRule, /background\s*:/);
-  assert.match(imageRule, /width:\s*100%/);
-  assert.match(imageRule, /height:\s*auto/);
+  assert.match(imageRule, /width:\s*auto/);
+  assert.match(imageRule, /height:\s*68px/);
   assert.doesNotMatch(imageRule, /object-fit\s*:/);
 });
 
@@ -43,4 +43,13 @@ test("filmstrip scrubbing maps pointer input to an exact playhead position", asy
   assert.match(source, /onPointerMove/);
   assert.match(source, /className="timeline-playhead"/);
   assert.match(source, /aria-valuenow=\{timelinePosition \+ 1\}/);
+});
+
+test("filmstrip scrolls horizontally without compressing thumbnails", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  const styles = await readFile("renderer/src/styles.css", "utf8");
+  assert.match(source, /scrollLeft \+= event\.deltaY/);
+  assert.match(styles, /overflow-x:\s*auto/);
+  assert.match(styles, /width:\s*max-content/);
+  assert.match(styles, /flex:\s*0 0 auto/);
 });

@@ -258,7 +258,17 @@ export function App() {
         </aside>
       </section>
 
-      <section className="timeline" aria-label="Timeline filmstrip" aria-busy={timelineLoading}>
+      <section
+        className="timeline"
+        aria-label="Timeline filmstrip"
+        aria-busy={timelineLoading}
+        onWheel={(event) => {
+          if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+            event.preventDefault();
+            event.currentTarget.scrollLeft += event.deltaY;
+          }
+        }}
+      >
         {video ? (
           timelineThumbnails.length > 0 ? (
             <div
