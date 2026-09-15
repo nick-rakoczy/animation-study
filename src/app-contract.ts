@@ -1,4 +1,5 @@
 import type { Rational } from "./rational.js";
+import type { ExposureCorrectionAction, ExposureCorrectionState } from "./exposure-correction.js";
 
 export interface MediaToolStatus {
   readonly available: boolean;
@@ -59,11 +60,18 @@ export type CelNavigationResult =
   | { readonly status: "failed"; readonly error: string }
   | { readonly status: "ready"; readonly timelinePosition: number | null };
 
+export type CorrectionInformation =
+  | { readonly status: "pending" }
+  | { readonly status: "failed"; readonly error: string }
+  | ({ readonly status: "ready" } & ExposureCorrectionState);
+
 export interface AnimationStudyApi {
   getMediaToolStatus(): Promise<MediaToolStatus>;
   openVideo(): Promise<OpenVideoResult | null>;
   getFrame(timelinePosition: number): Promise<DisplayFrame>;
   getCelInformation(timelinePosition: number): Promise<CelInformation>;
   getAdjacentCelPosition(timelinePosition: number, direction: "previous" | "next"): Promise<CelNavigationResult>;
+  getCorrectionInformation(timelinePosition: number): Promise<CorrectionInformation>;
+  applyExposureCorrection(action: ExposureCorrectionAction): Promise<void>;
   getTimelineThumbnails(sampleCount: number): Promise<readonly TimelineThumbnail[]>;
 }

@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Split, merge, representative-frame selection, and boundary confirmation.
+Undo and redo for every correction.
 
 ## Phase 0: decisions and technical proofs
 
@@ -74,7 +74,7 @@ Split, merge, representative-frame selection, and boundary confirmation.
 - [x] Add `+` and `-` timeline scale controls.
 - [x] Add inclusive timeline range selection.
 - [x] Add `Shift+Left` and `Shift+Right` cel navigation.
-- [ ] Add split, merge, representative-frame selection, and boundary confirmation.
+- [x] Add split, merge, representative-frame selection, and boundary confirmation.
 - [ ] Add undo and redo for every correction.
 - [ ] Add accessible focus behavior and complete keyboard coverage.
 - [ ] Keep the interface responsive while background analysis runs.
@@ -146,12 +146,13 @@ Split, merge, representative-frame selection, and boundary confirmation.
 | 2026-09-14 | Timeline scale tests | Changed filmstrip sampling through five bounded density levels, skipped ineffective levels for short sources, and added button and keyboard controls |
 | 2026-09-14 | Inclusive timeline range tests | Normalized forward and reverse drags, counted both endpoint frames, gave one-frame ranges visible width, and added range-mode and Shift-drag controls |
 | 2026-09-14 | Adjacent-cel navigation tests | Resolved previous and next exposure starts from any frame in a hold, stopped at file boundaries, and bound the actions to shifted arrow keys |
+| 2026-09-14 | Exposure correction tests | Split and merged spans, changed representative frames, confirmed uncertain boundaries as held or changed, reindexed chronological cels, and exposed guarded controls in the information panel |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
-- Timeline ranges are session-only until export and project correction persistence are implemented.
+- Timeline ranges and exposure corrections are session-only until export and project correction persistence are implemented.
 - Analysis progress is not shown in the interface yet. Timeline corrections and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

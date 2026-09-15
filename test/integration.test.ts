@@ -486,6 +486,22 @@ test("opens the viewer with pending cel data and fills it after background analy
     status: "ready",
     timelinePosition: null,
   });
+  assert.deepEqual(await service.getCorrectionInformation(1), {
+    status: "ready",
+    canSplit: true,
+    canMergePrevious: false,
+    canMergeNext: true,
+    representativeFrameNumber: 1,
+    selectedFrameIsRepresentative: false,
+    boundaryBeforeNeedsReview: false,
+  });
+  await service.applyExposureCorrection({ type: "select-representative", timelinePosition: 1 });
+  assert.equal((await service.getCorrectionInformation(1)).status, "ready");
+  assert.equal((await service.getCorrectionInformation(1) as { representativeFrameNumber: number }).representativeFrameNumber, 2);
+  await service.applyExposureCorrection({ type: "split", timelinePosition: 1 });
+  assert.equal((await service.getCelInformation(1) as { displayCelNumber: number }).displayCelNumber, 2);
+  await service.applyExposureCorrection({ type: "merge-previous", timelinePosition: 1 });
+  assert.equal((await service.getCelInformation(1) as { displayCelNumber: number }).displayCelNumber, 1);
   assert.ok((await stat(`${sourcePath}.animstudy`)).size > 0);
 });
 

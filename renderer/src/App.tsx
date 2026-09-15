@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CelInformation, DisplayFrame, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
+import type { CelInformation, CorrectionInformation, DisplayFrame, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
+import type { ExposureCorrectionAction } from "../../src/exposure-correction.js";
 import { timelinePositionAtPlaybackTime } from "../../src/playback.js";
 import { createInclusiveTimelineRange, timelineRangeFractions, type InclusiveTimelineRange } from "../../src/timeline-range.js";
 import { defaultTimelineScaleIndex, nextTimelineScaleIndex, timelineSampleCounts } from "../../src/timeline-scale.js";
@@ -11,6 +12,9 @@ export function App() {
   const [frame, setFrame] = useState<DisplayFrame | null>(null);
   const [timelinePosition, setTimelinePosition] = useState(0);
   const [celInformation, setCelInformation] = useState<CelInformation | null>(null);
+  const [correctionInformation, setCorrectionInformation] = useState<CorrectionInformation | null>(null);
+  const [correctionRevision, setCorrectionRevision] = useState(0);
+  const [correctionBusy, setCorrectionBusy] = useState(false);
   const [timelineThumbnails, setTimelineThumbnails] = useState<readonly TimelineThumbnail[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineScaleIndex, setTimelineScaleIndex] = useState(defaultTimelineScaleIndex);
@@ -42,6 +46,8 @@ export function App() {
         requestedFramePosition.current = null;
         setTimelinePosition(opened.frame.timelinePosition);
         setCelInformation({ status: "pending" });
+        setCorrectionInformation({ status: "pending" });
+        setCorrectionRevision(0);
         setTimelineThumbnails([]);
         setTimelineScaleIndex(defaultTimelineScaleIndex);
         setTimelineRange(null);
@@ -218,7 +224,45 @@ export function App() {
       cancelled = true;
       if (retry) clearTimeout(retry);
     };
-  }, [timelinePosition, video]);
+  }, [correctionRevision, timelinePosition, video]);
+
+  useEffect(() => {
+    if (!video) {
+      setCorrectionInformation(null);
+      return;
+    }
+    let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      try {
+        const result = await window.animationStudy.getCorrectionInformation(timelinePosition);
+        if (cancelled) return;
+        setCorrectionInformation(result);
+        if (result.status === "pending") retry = setTimeout(() => void refresh(), 200);
+      } catch (caught) {
+        if (!cancelled) setCorrectionInformation({ status: "failed", error: errorMessage(caught) });
+      }
+    };
+    void refresh();
+    return () => {
+      cancelled = true;
+      if (retry) clearTimeout(retry);
+    };
+  }, [correctionRevision, timelinePosition, video]);
+
+  const correctExposure = useCallback(async (type: ExposureCorrectionAction["type"]) => {
+    if (!video || correctionBusy) return;
+    setCorrectionBusy(true);
+    setError(null);
+    try {
+      await window.animationStudy.applyExposureCorrection({ type, timelinePosition });
+      setCorrectionRevision((revision) => revision + 1);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setCorrectionBusy(false);
+    }
+  }, [correctionBusy, timelinePosition, video]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -255,6 +299,7 @@ export function App() {
   const selectedTiming = video?.playbackFrames[timelinePosition];
   const pendingCelValue = video ? "Pending analysis" : undefined;
   const readyCel = celInformation?.status === "ready" ? celInformation : null;
+  const readyCorrection = correctionInformation?.status === "ready" ? correctionInformation : null;
   const unavailableCelValue = celInformation?.status === "failed" ? "Unavailable" : pendingCelValue;
   const playheadPercent = video && video.playbackFrames.length > 1
     ? (timelinePosition / (video.playbackFrames.length - 1)) * 100
@@ -328,6 +373,41 @@ export function App() {
           <Info label="Hold length" value={readyCel ? `${readyCel.holdLengthFrames} ${readyCel.holdLengthFrames === 1 ? "frame" : "frames"}` : unavailableCelValue} />
           <Info label="Cadence" value={readyCel?.cadenceLabel ?? unavailableCelValue} />
           <Info label="Elapsed duration" value={readyCel ? formatRationalSeconds(readyCel.elapsedDuration) : unavailableCelValue} />
+          <section className="corrections" aria-label="Exposure corrections">
+            <h2>Corrections</h2>
+            <p className="representative-readout">
+              {readyCorrection
+                ? `Representative frame ${readyCorrection.representativeFrameNumber}`
+                : correctionInformation?.status === "failed" ? "Corrections unavailable" : "Pending analysis"}
+            </p>
+            <div className="correction-buttons">
+              <button
+                disabled={!readyCorrection?.canSplit || correctionBusy}
+                onClick={() => void correctExposure("split")}
+              >Split before frame</button>
+              <button
+                disabled={!readyCorrection?.canMergePrevious || correctionBusy}
+                onClick={() => void correctExposure("merge-previous")}
+              >Merge previous</button>
+              <button
+                disabled={!readyCorrection?.canMergeNext || correctionBusy}
+                onClick={() => void correctExposure("merge-next")}
+              >Merge next</button>
+              <button
+                disabled={!readyCorrection || readyCorrection.selectedFrameIsRepresentative || correctionBusy}
+                onClick={() => void correctExposure("select-representative")}
+              >Use frame as representative</button>
+            </div>
+            {readyCorrection?.boundaryBeforeNeedsReview ? (
+              <div className="boundary-confirmation">
+                <p>Uncertain boundary before this frame</p>
+                <div>
+                  <button disabled={correctionBusy} onClick={() => void correctExposure("confirm-same")}>Confirm hold</button>
+                  <button disabled={correctionBusy} onClick={() => void correctExposure("confirm-changed")}>Confirm change</button>
+                </div>
+              </div>
+            ) : null}
+          </section>
         </aside>
       </section>
 

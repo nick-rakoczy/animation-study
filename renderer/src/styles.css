@@ -351,6 +351,59 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+.corrections {
+  padding-top: 2px;
+  border-top: 1px solid #303237;
+}
+
+.corrections h2 {
+  margin-top: 16px;
+  margin-bottom: 10px;
+}
+
+.representative-readout,
+.boundary-confirmation p {
+  color: #a9acb1;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.correction-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.correction-buttons button,
+.boundary-confirmation button {
+  min-height: 32px;
+  padding: 5px 7px;
+  font-size: 11px;
+}
+
+.correction-buttons button:last-child {
+  grid-column: 1 / -1;
+}
+
+.boundary-confirmation {
+  margin-top: 12px;
+  padding: 9px;
+  border: 1px solid #725b38;
+  border-radius: 5px;
+  background: #292319;
+}
+
+.boundary-confirmation > div {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.boundary-confirmation button {
+  flex: 1;
+}
+
 .transport {
   display: flex;
   align-items: center;

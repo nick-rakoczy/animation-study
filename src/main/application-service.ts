@@ -8,12 +8,13 @@ import { AnalysisScoreCache } from "../analysis-score.js";
 import { AnalysisSensitivity, defaultAnalysisSensitivity } from "../analysis-sensitivity.js";
 import { adjacentCelStartPosition, celInformationForFrame } from "../cel-information.js";
 import { chooseSamplePositions } from "../contact-sheet.js";
+import { applyExposureCorrection, correctionStateForFrame, type ExposureCorrectionAction } from "../exposure-correction.js";
 import type { ExposureTimeline } from "../exposure-span.js";
 import { FrameProxyCache } from "../frame-cache.js";
 import { createPlaybackFrames } from "../playback.js";
 import { PlaybackProxy } from "../playback-proxy.js";
 import { probeVideo } from "../probe.js";
-import type { CelInformation, CelNavigationResult, DisplayFrame, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
+import type { CelInformation, CelNavigationResult, CorrectionInformation, DisplayFrame, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
 import type { NormalizedTiming } from "../timing.js";
 
 interface VideoSession {
@@ -126,6 +127,24 @@ export class ApplicationService {
       status: "ready",
       timelinePosition: adjacentCelStartPosition(session.analysisTimeline, timelinePosition, direction),
     };
+  }
+
+  async getCorrectionInformation(timelinePosition: number): Promise<CorrectionInformation> {
+    const session = this.#session;
+    if (!session) throw new Error("Open a video before requesting correction information");
+    if (!session.timing.frames[timelinePosition]) {
+      throw new Error(`Timeline position ${timelinePosition} is outside the source`);
+    }
+    if (session.analysisError) return { status: "failed", error: session.analysisError };
+    if (!session.analysisTimeline) return { status: "pending" };
+    return { status: "ready", ...correctionStateForFrame(session.analysisTimeline, timelinePosition) };
+  }
+
+  async applyExposureCorrection(action: ExposureCorrectionAction): Promise<void> {
+    const session = this.#session;
+    if (!session) throw new Error("Open a video before applying an exposure correction");
+    if (!session.analysisTimeline) throw new Error("Exposure analysis is not ready");
+    session.analysisTimeline = applyExposureCorrection(session.analysisTimeline, action);
   }
 
   async getTimelineThumbnails(sampleCount: number): Promise<readonly TimelineThumbnail[]> {

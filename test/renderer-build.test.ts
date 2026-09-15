@@ -80,3 +80,13 @@ test("shifted arrow keys navigate adjacent cels", async () => {
   assert.match(source, /navigateCel\("next"\)/);
   assert.match(source, /getAdjacentCelPosition/);
 });
+
+test("information panel exposes all exposure correction actions", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  for (const action of ["split", "merge-previous", "merge-next", "select-representative", "confirm-same", "confirm-changed"]) {
+    assert.match(source, new RegExp(`correctExposure\\(\"${action}\"\\)`));
+  }
+  assert.match(source, /getCorrectionInformation/);
+  assert.match(source, /Representative frame/);
+  assert.match(source, /Uncertain boundary before this frame/);
+});
