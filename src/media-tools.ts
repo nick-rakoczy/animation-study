@@ -32,7 +32,17 @@ async function readVersion(executable: string): Promise<string> {
 
 function describeProcessFailure(error: unknown): string {
   if (error instanceof ProcessError) {
-    return `${error.executable} is unavailable. Install FFmpeg and make sure both ffmpeg and ffprobe are on PATH.`;
+    return `${error.executable} is unavailable. ${mediaToolInstallationGuidance()}`;
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+export function mediaToolInstallationGuidance(platform = process.platform): string {
+  if (platform === "win32") {
+    return "Download a Windows build from ffmpeg.org, then add its bin folder to PATH. Restart Animation Study afterward.";
+  }
+  if (platform === "linux") {
+    return "Install the ffmpeg package with your Linux distribution's package manager, then restart Animation Study.";
+  }
+  return "Install FFmpeg and make sure both ffmpeg and ffprobe are on PATH.";
 }

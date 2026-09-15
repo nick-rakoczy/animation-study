@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks";
 import { FrameProxyCache } from "./frame-cache.js";
 import { probeVideo } from "./probe.js";
 import { runProcess } from "./process.js";
+import { sourceContentFingerprint } from "./source-fingerprint.js";
 
 const sampleCount = 200;
 const targetMilliseconds = 1000 / 30;
@@ -34,6 +35,7 @@ async function main(): Promise<void> {
     const timing = await probeVideo(sourcePath);
     const cache = new FrameProxyCache({
       sourcePath,
+      sourceFingerprint: await sourceContentFingerprint(sourcePath),
       timing,
       cacheRoot: join(directory, "cache"),
       widthLimit: 1280,

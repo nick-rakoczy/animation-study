@@ -64,6 +64,7 @@ app.whenReady().then(() => {
     };
   });
   ipcMain.handle("media:cancel-export", () => service.cancelExport());
+  ipcMain.handle("media:clear-unused-cache", () => service.clearUnusedCache());
 
   createWindow();
   app.on("activate", () => {

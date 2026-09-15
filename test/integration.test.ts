@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -16,6 +16,7 @@ import { FrameProxyCache } from "../src/frame-cache.js";
 import { PlaybackProxy } from "../src/playback-proxy.js";
 import { probeVideo } from "../src/probe.js";
 import { ApplicationService } from "../src/main/application-service.js";
+import { sourceContentFingerprint } from "../src/source-fingerprint.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -61,6 +62,7 @@ test("probes a real 24000/1001 video and creates a contact sheet", async (contex
 
   const frameCache = new FrameProxyCache({
     sourcePath: videoPath,
+    sourceFingerprint: await sourceContentFingerprint(videoPath),
     timing,
     cacheRoot: directory,
     widthLimit: 160,
@@ -86,6 +88,7 @@ test("probes a real 24000/1001 video and creates a contact sheet", async (contex
 
   const playback = new PlaybackProxy({
     sourcePath: videoPath,
+    sourceFingerprint: await sourceContentFingerprint(videoPath),
     timing,
     cacheRoot: directory,
     widthLimit: 160,
@@ -106,6 +109,58 @@ test("probes a real 24000/1001 video and creates a contact sheet", async (contex
     { codec_name: "opus", codec_type: "audio" },
   ]);
   await playback.clear();
+});
+
+test("reports corrupt media and missing decoder diagnostics", async (context) => {
+  try {
+    await execFileAsync("ffprobe", ["-version"]);
+  } catch {
+    context.skip("ffprobe is required for this integration test");
+    return;
+  }
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-media-errors-test-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const corruptPath = join(directory, "corrupt.mp4");
+  await writeFile(corruptPath, "not a media container");
+  await assert.rejects(probeVideo(corruptPath), /Invalid data|moov atom|format/i);
+
+  const fakeProbe = join(directory, "missing-decoder.sh");
+  await writeFile(fakeProbe, [
+    "#!/bin/sh",
+    "echo 'Decoder h264 is not available' >&2",
+    "exit 1",
+  ].join("\n"));
+  await chmod(fakeProbe, 0o755);
+  await assert.rejects(
+    probeVideo(join(directory, "unsupported.mkv"), fakeProbe),
+    /Decoder h264 is not available/,
+  );
+});
+
+test("preserves non-square pixel metadata", async (context) => {
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+    await execFileAsync("ffprobe", ["-version"]);
+  } catch {
+    context.skip("ffmpeg and ffprobe are required for this integration test");
+    return;
+  }
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-aspect-ratio-test-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const sourcePath = join(directory, "non-square-pixels.mp4");
+  await execFileAsync("ffmpeg", [
+    "-v", "error",
+    "-f", "lavfi",
+    "-i", "testsrc2=s=96x54:r=2:d=1",
+    "-vf", "setsar=4/3",
+    "-c:v", "libx264",
+    "-pix_fmt", "yuv420p",
+    "-y",
+    sourcePath,
+  ]);
+  const timing = await probeVideo(sourcePath);
+  assert.equal(timing.stream.sampleAspectRatio, "4:3");
+  assert.equal(timing.stream.displayAspectRatio, "64:27");
 });
 
 test("keeps a timed audio event aligned with its video frame in the playback proxy", async (context) => {
@@ -143,6 +198,7 @@ test("keeps a timed audio event aligned with its video frame in the playback pro
   const timing = await probeVideo(sourcePath);
   const playback = new PlaybackProxy({
     sourcePath,
+    sourceFingerprint: await sourceContentFingerprint(sourcePath),
     timing,
     cacheRoot: directory,
     widthLimit: 64,
@@ -193,6 +249,7 @@ test("opens a one-hour 1080p source without creating a full-resolution frame seq
 
   const frameCache = new FrameProxyCache({
     sourcePath,
+    sourceFingerprint: await sourceContentFingerprint(sourcePath),
     timing,
     cacheRoot,
     widthLimit: 1280,
@@ -214,6 +271,7 @@ test("opens a one-hour 1080p source without creating a full-resolution frame seq
 
   const playback = new PlaybackProxy({
     sourcePath,
+    sourceFingerprint: await sourceContentFingerprint(sourcePath),
     timing,
     cacheRoot,
     widthLimit: 1280,
@@ -432,7 +490,7 @@ test("opens the viewer with pending cel data and fills it after background analy
 
   const directory = await mkdtemp(join(tmpdir(), "animation-study-cel-information-test-"));
   context.after(() => rm(directory, { force: true, recursive: true }));
-  const sourcePath = join(directory, "held drawing.mp4");
+  const sourcePath = join(directory, "held drawing 描画.mp4");
   await execFileAsync("ffmpeg", [
     "-v", "error",
     "-f", "lavfi",
@@ -443,6 +501,7 @@ test("opens the viewer with pending cel data and fills it after background analy
     "-y",
     sourcePath,
   ]);
+  await chmod(sourcePath, 0o444);
 
   const service = new ApplicationService(join(directory, "cache"));
   const opened = await service.openVideo(sourcePath);
@@ -488,7 +547,7 @@ test("opens the viewer with pending cel data and fills it after background analy
     frameCount: 2,
   }, exportDirectory);
   assert.deepEqual(exported.exportedTimelinePositions, [0, 2]);
-  assert.equal(exported.outputDirectory, join(exportDirectory, "held drawing.mp4_frames"));
+  assert.equal(exported.outputDirectory, join(exportDirectory, "held drawing 描画.mp4_frames"));
   assert.deepEqual(await readdir(exported.outputDirectory), ["2_0001.png", "2_0002.png"]);
   const exportedProbe = await execFileAsync("ffprobe", [
     "-v", "error",
@@ -524,7 +583,7 @@ test("opens the viewer with pending cel data and fills it after background analy
     endPosition: 2,
     frameCount: 2,
   }, exportDirectory);
-  assert.equal(collisionExport.outputDirectory, join(exportDirectory, "held drawing.mp4_frames_2"));
+  assert.equal(collisionExport.outputDirectory, join(exportDirectory, "held drawing 描画.mp4_frames_2"));
   assert.deepEqual(await readdir(collisionExport.outputDirectory), ["2_0001.png", "2_0002.png"]);
   assert.deepEqual(await readFile(exported.paths[0]!), originalFirstExport);
   assert.deepEqual(await service.getAdjacentCelPosition(1, "next"), {
@@ -570,6 +629,33 @@ test("opens the viewer with pending cel data and fills it after background analy
   await service.applyExposureCorrection({ type: "merge-next", timelinePosition: 1 });
   assert.equal((await service.getCorrectionInformation(1) as { canRedo: boolean }).canRedo, false);
   assert.ok((await stat(`${sourcePath}.animstudy`)).size > 0);
+
+  const reopenedService = new ApplicationService(join(directory, "cache"));
+  await reopenedService.openVideo(sourcePath);
+  const reopenedCel = await waitForCelInformation(reopenedService, 1);
+  assert.deepEqual(reopenedService.getBackgroundAnalysisStatus(), {
+    status: "ready",
+    loadedFromSidecar: true,
+  });
+  assert.deepEqual(reopenedCel, {
+    status: "ready",
+    displayCelNumber: 2,
+    exposureStartFrameNumber: 2,
+    holdLengthFrames: 3,
+    cadenceLabel: "On threes",
+    elapsedDuration: { numerator: "3", denominator: "4" },
+  });
+  assert.deepEqual(await reopenedService.getCorrectionInformation(1), {
+    status: "ready",
+    canSplit: false,
+    canMergePrevious: true,
+    canMergeNext: false,
+    representativeFrameNumber: 2,
+    selectedFrameIsRepresentative: true,
+    boundaryBeforeNeedsReview: false,
+    canUndo: false,
+    canRedo: false,
+  });
 });
 
 test("exports full-resolution frames in decoded display orientation", async (context) => {

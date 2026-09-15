@@ -19,6 +19,8 @@ export function App() {
   const [correctionBusy, setCorrectionBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [cacheBusy, setCacheBusy] = useState(false);
+  const [cacheStatus, setCacheStatus] = useState<string | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<BackgroundAnalysisStatus | null>(null);
   const [timelineThumbnails, setTimelineThumbnails] = useState<readonly TimelineThumbnail[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
@@ -71,6 +73,21 @@ export function App() {
       setError(errorMessage(caught));
     } finally {
       setBusy(false);
+    }
+  }, []);
+
+  const clearUnusedCache = useCallback(async () => {
+    setCacheBusy(true);
+    setCacheStatus(null);
+    setError(null);
+    try {
+      const result = await window.animationStudy.clearUnusedCache();
+      const noun = result.removedFileCount === 1 ? "file" : "files";
+      setCacheStatus(`Removed ${result.removedFileCount} cached ${noun} (${formatBytes(result.removedBytes)})`);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setCacheBusy(false);
     }
   }, []);
 
@@ -413,9 +430,15 @@ export function App() {
             </div>
           ) : null}
         </div>
-        <button ref={openButton} className="open-button" disabled={busy || tools?.available !== true} onClick={() => void openVideo()}>
-          {busy && !video ? "Opening..." : "Open video"}
-        </button>
+        <div className="top-bar-actions">
+          {cacheStatus ? <output className="cache-status" aria-live="polite">{cacheStatus}</output> : null}
+          <button disabled={cacheBusy || analysisStatus?.status === "running"} onClick={() => void clearUnusedCache()}>
+            {cacheBusy ? "Clearing..." : "Clear unused cache"}
+          </button>
+          <button ref={openButton} className="open-button" disabled={busy || tools?.available !== true} onClick={() => void openVideo()}>
+            {busy && !video ? "Opening..." : "Open video"}
+          </button>
+        </div>
       </header>
 
       <section className="workspace">
@@ -703,4 +726,10 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }

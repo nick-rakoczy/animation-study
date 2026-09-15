@@ -5,6 +5,7 @@ import type { AnalysisScores, FrameComponentScore } from "./analysis-score.js";
 import { classifyBoundaries, type ClassifiedBoundary } from "./boundary-classifier.js";
 import { buildExposureSpans, type ExposureTimeline } from "./exposure-span.js";
 import { classificationSettingsForSensitivity } from "./analysis-sensitivity.js";
+import type { NormalizedTiming } from "./timing.js";
 
 export interface PartialAnalysisSnapshot {
   readonly sourceFingerprint: string;
@@ -32,10 +33,82 @@ export interface ResolvedAnalysisSnapshot {
 
 export class AnalysisProject {
   readonly path: string;
+  readonly #sourcePath: string;
 
   constructor(sourcePath: string) {
     if (sourcePath.length === 0) throw new Error("A source path is required for the analysis project");
+    this.#sourcePath = sourcePath;
     this.path = `${sourcePath}.animstudy`;
+  }
+
+  saveSource(timing: NormalizedTiming, sourceFingerprint: string): void {
+    if (sourceFingerprint.length === 0) throw new Error("The source fingerprint is required");
+    validateTiming(timing);
+    const database = new DatabaseSync(this.path);
+    try {
+      createSchema(database);
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        database.prepare(`
+          INSERT INTO source_metadata (
+            id, source_path, source_fingerprint, stream_json, container_json,
+            frame_count, first_presentation_timestamp_json,
+            presentation_span_json, updated_at
+          ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            source_path = excluded.source_path,
+            source_fingerprint = excluded.source_fingerprint,
+            stream_json = excluded.stream_json,
+            container_json = excluded.container_json,
+            frame_count = excluded.frame_count,
+            first_presentation_timestamp_json = excluded.first_presentation_timestamp_json,
+            presentation_span_json = excluded.presentation_span_json,
+            updated_at = excluded.updated_at
+        `).run(
+          this.#sourcePath,
+          sourceFingerprint,
+          JSON.stringify(timing.stream),
+          JSON.stringify(timing.container),
+          timing.frameCount,
+          JSON.stringify(timing.firstPresentationTimestamp),
+          JSON.stringify(timing.presentationSpan),
+          new Date().toISOString(),
+        );
+        database.exec("DELETE FROM source_frames");
+        const insertFrame = database.prepare(`
+          INSERT INTO source_frames (
+            id, timeline_position, display_frame_number, decoded_frame_index,
+            presentation_timestamp_numerator, presentation_timestamp_denominator,
+            presentation_duration_numerator, presentation_duration_denominator,
+            presentation_timestamp_ticks, presentation_duration_ticks,
+            key_frame, picture_type, duration_source
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const frame of timing.frames) {
+          insertFrame.run(
+            frame.id,
+            frame.timelinePosition,
+            frame.displayFrameNumber,
+            frame.decodedFrameIndex,
+            frame.presentationTimestamp.numerator,
+            frame.presentationTimestamp.denominator,
+            frame.presentationDuration.numerator,
+            frame.presentationDuration.denominator,
+            frame.presentationTimestampTicks,
+            frame.presentationDurationTicks,
+            frame.keyFrame ? 1 : 0,
+            frame.pictureType,
+            frame.durationSource,
+          );
+        }
+        database.exec("COMMIT");
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    } finally {
+      database.close();
+    }
   }
 
   savePartial(snapshot: PartialAnalysisSnapshot): void {
@@ -124,11 +197,17 @@ export class AnalysisProject {
         boundaries,
       };
       const classified = classifyBoundaries(scores, classificationSettings);
-      const timeline = buildExposureSpans(classified);
+      const automaticTimeline = buildExposureSpans(classified);
       validateStoredClassifications(boundaryRows, classified.boundaries);
+      const correctionRow = database.prepare(`
+        SELECT timeline_json FROM correction_state WHERE id = 1
+      `).get();
+      const timeline = correctionRow
+        ? parseCorrectedTimeline(correctionRow.timeline_json, automaticTimeline)
+        : automaticTimeline;
       validateStoredExposures(database, timeline);
       const snapshot = { scores, timeline, sensitivity };
-      validateCompletedSnapshot(snapshot);
+      validateCompletedSnapshot(snapshot, correctionRow !== undefined);
       return snapshot;
     } catch (error) {
       throw new Error("Could not load the completed analysis sidecar", { cause: error });
@@ -152,6 +231,44 @@ export class AnalysisProject {
     ) throw new Error("New analysis does not match the requested source");
     this.saveCompleted(snapshot);
     return { snapshot, loadedFromSidecar: false };
+  }
+
+  saveCorrection(timeline: ExposureTimeline): void {
+    validateCorrectedTimeline(timeline);
+    const database = new DatabaseSync(this.path);
+    try {
+      createSchema(database);
+      const state = database.prepare(`
+        SELECT status, source_fingerprint, proxy_settings_json, frame_count
+        FROM analysis_state WHERE id = 1
+      `).get();
+      if (!state || state.status !== "completed") {
+        throw new Error("Completed analysis is required before saving corrections");
+      }
+      if (
+        state.source_fingerprint !== timeline.sourceFingerprint ||
+        state.proxy_settings_json !== JSON.stringify(timeline.proxySettings) ||
+        state.frame_count !== timeline.frameCount
+      ) throw new Error("The correction does not match the saved analysis");
+
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        replaceExposures(database, timeline);
+        database.prepare(`
+          INSERT INTO correction_state (id, timeline_json, updated_at)
+          VALUES (1, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            timeline_json = excluded.timeline_json,
+            updated_at = excluded.updated_at
+        `).run(JSON.stringify(timeline), new Date().toISOString());
+        database.exec("COMMIT");
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    } finally {
+      database.close();
+    }
   }
 
   #save(snapshot: StoredSnapshot): void {
@@ -188,7 +305,7 @@ export class AnalysisProject {
           new Date().toISOString(),
         );
 
-        database.exec("DELETE FROM boundary_scores; DELETE FROM exposures");
+        database.exec("DELETE FROM boundary_scores; DELETE FROM exposures; DELETE FROM correction_state");
         const insertBoundary = database.prepare(`
           INSERT INTO boundary_scores (
             from_timeline_position, to_timeline_position,
@@ -210,25 +327,7 @@ export class AnalysisProject {
           );
         }
 
-        if (snapshot.timeline) {
-          const insertExposure = database.prepare(`
-            INSERT INTO exposures (
-              id, exposure_index, display_cel_number, start_timeline_position,
-              end_timeline_position, frame_count, representative_timeline_position
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-          `);
-          for (const span of snapshot.timeline.spans) {
-            insertExposure.run(
-              span.id,
-              span.exposureIndex,
-              span.displayCelNumber,
-              span.startTimelinePosition,
-              span.endTimelinePosition,
-              span.frameCount,
-              span.representativeTimelinePosition,
-            );
-          }
-        }
+        if (snapshot.timeline) replaceExposures(database, snapshot.timeline);
         database.exec("COMMIT");
       } catch (error) {
         database.exec("ROLLBACK");
@@ -254,7 +353,37 @@ interface StoredSnapshot {
 
 function createSchema(database: DatabaseSync): void {
   database.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = FULL;
     PRAGMA foreign_keys = ON;
+    CREATE TABLE IF NOT EXISTS source_metadata (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      source_path TEXT NOT NULL,
+      source_fingerprint TEXT NOT NULL,
+      stream_json TEXT NOT NULL,
+      container_json TEXT NOT NULL,
+      frame_count INTEGER NOT NULL CHECK (frame_count > 0),
+      first_presentation_timestamp_json TEXT NOT NULL,
+      presentation_span_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS source_frames (
+      id TEXT PRIMARY KEY,
+      timeline_position INTEGER NOT NULL UNIQUE,
+      display_frame_number INTEGER NOT NULL,
+      decoded_frame_index INTEGER NOT NULL,
+      presentation_timestamp_numerator TEXT NOT NULL,
+      presentation_timestamp_denominator TEXT NOT NULL,
+      presentation_duration_numerator TEXT NOT NULL,
+      presentation_duration_denominator TEXT NOT NULL,
+      presentation_timestamp_ticks TEXT NOT NULL,
+      presentation_duration_ticks TEXT,
+      key_frame INTEGER NOT NULL CHECK (key_frame IN (0, 1)),
+      picture_type TEXT,
+      duration_source TEXT NOT NULL CHECK (
+        duration_source IN ('packet', 'next-timestamp', 'nominal-rate', 'previous-frame')
+      )
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS analysis_state (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       status TEXT NOT NULL CHECK (status IN ('partial', 'completed')),
@@ -285,7 +414,33 @@ function createSchema(database: DatabaseSync): void {
       frame_count INTEGER NOT NULL,
       representative_timeline_position INTEGER NOT NULL
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS correction_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      timeline_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
   `);
+}
+
+function replaceExposures(database: DatabaseSync, timeline: ExposureTimeline): void {
+  database.exec("DELETE FROM exposures");
+  const insertExposure = database.prepare(`
+    INSERT INTO exposures (
+      id, exposure_index, display_cel_number, start_timeline_position,
+      end_timeline_position, frame_count, representative_timeline_position
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const span of timeline.spans) {
+    insertExposure.run(
+      span.id,
+      span.exposureIndex,
+      span.displayCelNumber,
+      span.startTimelinePosition,
+      span.endTimelinePosition,
+      span.frameCount,
+      span.representativeTimelinePosition,
+    );
+  }
 }
 
 function parseClassificationSettings(value: unknown): ExposureTimeline["classificationSettings"] {
@@ -364,7 +519,7 @@ function validatePartialSnapshot(snapshot: PartialAnalysisSnapshot): void {
   validateBoundaryPrefix(snapshot.boundaries);
 }
 
-function validateCompletedSnapshot(snapshot: CompletedAnalysisSnapshot): void {
+function validateCompletedSnapshot(snapshot: CompletedAnalysisSnapshot, corrected = false): void {
   if (snapshot.scores.boundaries.length !== snapshot.scores.frameCount - 1) {
     throw new Error("A completed analysis must contain every source boundary");
   }
@@ -381,6 +536,78 @@ function validateCompletedSnapshot(snapshot: CompletedAnalysisSnapshot): void {
     JSON.stringify(snapshot.timeline.classificationSettings)
   ) throw new Error("Completed classification settings must match the analysis sensitivity");
   validateBoundaryPrefix(snapshot.scores.boundaries);
+  if (corrected) validateCorrectedTimeline(snapshot.timeline);
+}
+
+function parseCorrectedTimeline(value: unknown, automaticTimeline: ExposureTimeline): ExposureTimeline {
+  if (typeof value !== "string") throw new Error("The saved correction has no timeline");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    throw new Error("The saved correction timeline is invalid", { cause: error });
+  }
+  if (!parsed || typeof parsed !== "object") throw new Error("The saved correction timeline is invalid");
+  const timeline = parsed as ExposureTimeline;
+  if (
+    timeline.sourceFingerprint !== automaticTimeline.sourceFingerprint ||
+    timeline.frameCount !== automaticTimeline.frameCount ||
+    JSON.stringify(timeline.proxySettings) !== JSON.stringify(automaticTimeline.proxySettings) ||
+    JSON.stringify(timeline.classificationSettings) !== JSON.stringify(automaticTimeline.classificationSettings)
+  ) throw new Error("The saved correction does not match the completed analysis");
+  validateCorrectedTimeline(timeline);
+  return timeline;
+}
+
+function validateCorrectedTimeline(timeline: ExposureTimeline): void {
+  if (timeline.schemaVersion !== 1 || timeline.sourceFingerprint.length === 0) {
+    throw new Error("The corrected timeline has invalid project identity");
+  }
+  if (!Number.isSafeInteger(timeline.frameCount) || timeline.frameCount < 1 || timeline.spans.length < 1) {
+    throw new Error("The corrected timeline must contain source frames and exposures");
+  }
+  let expectedStart = 0;
+  timeline.spans.forEach((span, index) => {
+    if (
+      span.exposureIndex !== index ||
+      span.displayCelNumber !== index + 1 ||
+      span.startTimelinePosition !== expectedStart ||
+      !Number.isSafeInteger(span.endTimelinePosition) ||
+      span.endTimelinePosition < span.startTimelinePosition ||
+      span.frameCount !== span.endTimelinePosition - span.startTimelinePosition + 1 ||
+      span.representativeTimelinePosition < span.startTimelinePosition ||
+      span.representativeTimelinePosition > span.endTimelinePosition
+    ) throw new Error("Corrected exposures must cover the source in chronological order");
+    expectedStart = span.endTimelinePosition + 1;
+  });
+  if (expectedStart !== timeline.frameCount) {
+    throw new Error("Corrected exposures must cover every source frame");
+  }
+  for (const boundary of timeline.reviewBoundaries) {
+    if (
+      !Number.isSafeInteger(boundary.fromTimelinePosition) ||
+      boundary.toTimelinePosition !== boundary.fromTimelinePosition + 1 ||
+      boundary.fromTimelinePosition < 0 ||
+      boundary.toTimelinePosition >= timeline.frameCount ||
+      boundary.classification !== "uncertain"
+    ) throw new Error("The corrected timeline has an invalid review boundary");
+  }
+}
+
+function validateTiming(timing: NormalizedTiming): void {
+  if (
+    timing.schemaVersion !== 1 ||
+    !Number.isSafeInteger(timing.frameCount) ||
+    timing.frameCount < 1 ||
+    timing.frames.length !== timing.frameCount
+  ) throw new Error("Source timing must contain every decoded frame");
+  timing.frames.forEach((frame, index) => {
+    if (
+      frame.timelinePosition !== index ||
+      frame.displayFrameNumber !== index + 1 ||
+      frame.id.length === 0
+    ) throw new Error("Source timing frames must be in chronological order");
+  });
 }
 
 function validateBoundaryPrefix(boundaries: readonly FrameComponentScore[]): void {

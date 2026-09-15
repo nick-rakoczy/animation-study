@@ -276,6 +276,22 @@ h1 {
   accent-color: #e4a853;
 }
 
+.top-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-bar-actions button {
+  padding: 9px 12px;
+}
+
+.cache-status {
+  max-width: 240px;
+  color: #93969c;
+  font-size: 11px;
+}
+
 .open-button {
   min-width: 108px;
   padding: 9px 14px;

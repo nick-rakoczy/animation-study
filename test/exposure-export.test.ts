@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -125,5 +125,35 @@ test("removes staged files when the decoder fails", async (context) => {
     range: { startPosition: 3, endPosition: 3, frameCount: 1 },
     ffmpegExecutable: fakeFfmpeg,
   }), /exited with code 1/);
+  assert.deepEqual(await readdir(join(directory, "output")), []);
+});
+
+test("rolls back committed files when the destination runs out of space", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-full-disk-export-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const fakeFfmpeg = join(directory, "fake-ffmpeg.cjs");
+  await writeFile(fakeFfmpeg, [
+    "#!/usr/bin/env node",
+    "const fs = require('node:fs');",
+    "const output = process.argv.at(-1);",
+    "fs.writeFileSync(output.replace('%04d', '0001'), 'first');",
+    "fs.writeFileSync(output.replace('%04d', '0002'), 'second');",
+  ].join("\n"));
+  await chmod(fakeFfmpeg, 0o755);
+  let commitCount = 0;
+  await assert.rejects(exportExposureSelection({
+    sourcePath: join(directory, "source.mp4"),
+    outputDirectory: join(directory, "output"),
+    timeline,
+    range: { startPosition: 3, endPosition: 5, frameCount: 3 },
+    ffmpegExecutable: fakeFfmpeg,
+    commitFile: async (...args) => {
+      commitCount += 1;
+      if (commitCount === 2) {
+        throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+      }
+      await copyFile(...args);
+    },
+  }), (error: unknown) => error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOSPC");
   assert.deepEqual(await readdir(join(directory, "output")), []);
 });

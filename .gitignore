@@ -3,3 +3,4 @@ dist/
 renderer-dist/
 *.tmp
 test-output/
+release/

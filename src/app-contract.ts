@@ -77,6 +77,11 @@ export interface ExportSelectionResult {
   readonly exportedFrameCount: number;
 }
 
+export interface CacheCleanupResult {
+  readonly removedFileCount: number;
+  readonly removedBytes: number;
+}
+
 export interface AnimationStudyApi {
   getMediaToolStatus(): Promise<MediaToolStatus>;
   openVideo(): Promise<OpenVideoResult | null>;
@@ -91,4 +96,5 @@ export interface AnimationStudyApi {
   getTimelineThumbnails(sampleCount: number): Promise<readonly TimelineThumbnail[]>;
   exportSelection(range: InclusiveTimelineRange): Promise<ExportSelectionResult | null>;
   cancelExport(): Promise<void>;
+  clearUnusedCache(): Promise<CacheCleanupResult>;
 }

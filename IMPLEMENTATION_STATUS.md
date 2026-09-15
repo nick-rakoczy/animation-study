@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Run the documented Clip Studio Paint EX 5.1.4 compatibility test on Windows.
+Phase 5 is complete. Remaining work is tracked in Phase 0, plus the user-owned Clip Studio Paint check.
 
 ## Phase 0: decisions and technical proofs
 
@@ -15,7 +15,7 @@ Run the documented Clip Studio Paint EX 5.1.4 compatibility test on Windows.
 - [x] Build the command-line timing probe specified by the plan.
 - [x] Confirm that the Electron renderer starts on Linux.
 - [x] Collect the full fixture set for clean holds, compression noise, camera motion, dissolves, variable frame rate, and returning drawings.
-- [ ] Complete the Clip Studio Paint compatibility test on Windows.
+- [ ] Complete the Clip Studio Paint compatibility test on Windows. User-owned manual validation.
 - [x] Test the playback design on Linux.
 - [ ] Test the playback design on Windows.
 - [ ] Set and document the minimum supported FFmpeg version.
@@ -89,19 +89,19 @@ Run the documented Clip Studio Paint EX 5.1.4 compatibility test on Windows.
 - [x] Create a numbered sibling folder when intended names already exist.
 - [x] Never overwrite an existing export file.
 - [x] Leave no output that looks complete after cancellation or failure.
-- [ ] Validate exported fixtures in the target Clip Studio Paint version.
+- [ ] Validate exported fixtures in the target Clip Studio Paint version. User-owned manual validation.
 
 ## Phase 5: persistence and release
 
 - [x] Create the SQLite `<source filename>.animstudy` sidecar.
-- [ ] Store source metadata, timing, analysis settings, exposures, scores, and corrections.
-- [ ] Add source-content hashing for cache invalidation.
-- [ ] Add crash-safe sidecar writes.
-- [ ] Add cache cleanup controls.
-- [ ] Add platform-specific FFmpeg installation instructions.
-- [ ] Test corrupt files, missing codecs, rotation, non-square pixels, non-ASCII paths, read-only sources, low disk space, and cancelled jobs.
-- [ ] Package an x86-64 Linux AppImage.
-- [ ] Verify the complete workflow on a clean Linux machine.
+- [x] Store source metadata, timing, analysis settings, exposures, scores, and corrections.
+- [x] Add source-content hashing for cache invalidation.
+- [x] Add crash-safe sidecar writes.
+- [x] Add cache cleanup controls.
+- [x] Add platform-specific FFmpeg installation instructions.
+- [x] Test corrupt files, missing codecs, rotation, non-square pixels, non-ASCII paths, read-only sources, low disk space, and cancelled jobs.
+- [x] Package an x86-64 Linux AppImage.
+- [x] Verify the complete workflow on a clean Linux machine.
 
 ## Deferred and excluded
 
@@ -155,12 +155,20 @@ Run the documented Clip Studio Paint EX 5.1.4 compatibility test on Windows.
 | 2026-09-15 | Export naming and folder tests | Restarted cel numbering at `0001`, used the selected starting frame prefix, reused a source folder for non-colliding names, and created `_2` for a repeated export |
 | 2026-09-15 | Export safety tests | Used exclusive file creation, preserved the first export during a collision, exposed cancellation through typed IPC, and removed hidden staging files after cancellation or decoder failure |
 | 2026-09-15 | Clip Studio documentation review | Confirmed 5.1.4 as the current Windows release and recorded the official multi-file cel import, preference behavior, and manual assignment workflow in `docs/CLIP_STUDIO_COMPATIBILITY.md`; execution in Clip Studio Paint remains pending |
+| 2026-09-15 | Sidecar project persistence tests | Stored normalized stream and container metadata, exact per-frame timing, analysis settings, component scores, exposures, and the corrected timeline in SQLite; reopened the source through the application service and restored its edited exposure boundary and representative frame without reanalysis |
+| 2026-09-15 | Source-content fingerprint tests | Used SHA-256 file-content fingerprints for analysis, display-frame, thumbnail, and playback cache keys; changed content invalidated keys even when path, size, and modification time stayed fixed |
+| 2026-09-15 | Crash-safe sidecar tests | Enabled SQLite WAL journaling with full synchronization and verified that an interrupted correction transaction rolled back to the prior complete project |
+| 2026-09-15 | Cache cleanup tests | Added a renderer control and typed IPC method that remove unused cache files while preserving all active-source cache directories; rejected filesystem-root cleanup |
+| 2026-09-15 | FFmpeg installation guidance | Added Linux and Windows instructions, official download links, PATH checks, missing-codec guidance, and platform-specific startup errors |
+| 2026-09-15 | Release edge-case suite | Passed corrupt-container and missing-decoder diagnostics, display rotation, non-square pixels, a read-only source at a non-ASCII path, simulated disk exhaustion rollback, and analysis and export cancellation cleanup |
+| 2026-09-15 | Linux AppImage package | Built `Animation-Study-0.1.0-x86_64.AppImage`, a 64-bit x86-64 ELF AppImage with SHA-256 `08fa24059faa1de8d0be9d3c3fb06765f17b5108653214b00d4260a44d0eb6a6` |
+| 2026-09-15 | Clean Ubuntu 24.04 release workflow | In a clean amd64 container with no Node.js or developer dependencies, extracted the AppImage, analyzed a four-frame fixture, reopened its SQLite project from the sidecar, and exported the expected two PNG cels |
+| 2026-09-15 | Packaged Electron startup | The production x86-64 package remained running under a virtual X display until the 10-second smoke-test timeout |
+| 2026-09-15 | Final Phase 5 verification | `npm run typecheck` passed; all 15 test files passed; the production renderer build and `git diff --check` passed |
 | 2026-09-15 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
-- Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
-- Timeline ranges and exposure corrections are session-only until project correction persistence is implemented.
+- Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation progress and cancellation have not been implemented.
 - Clip Studio Paint EX 5.1.4 is not installed in this Linux workspace. The Windows compatibility procedure and expected fixture are documented, but the manual import test and `.clip` acceptance fixture still require the target application on Windows.
-- The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

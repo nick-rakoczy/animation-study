@@ -18,13 +18,17 @@ import { probeVideo } from "../probe.js";
 import type { BackgroundAnalysisStatus, CelInformation, CelNavigationResult, CorrectionInformation, DisplayFrame, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
 import type { NormalizedTiming } from "../timing.js";
 import type { InclusiveTimelineRange } from "../timeline-range.js";
+import { sourceContentFingerprint } from "../source-fingerprint.js";
+import { clearCacheDirectories, type CacheCleanupResult } from "../cache-cleanup.js";
 
 interface VideoSession {
   readonly sourcePath: string;
+  readonly sourceFingerprint: string;
   readonly timing: NormalizedTiming;
   readonly cache: FrameProxyCache;
   readonly thumbnailCache: FrameProxyCache;
   readonly playback: PlaybackProxy;
+  readonly project: AnalysisProject;
   readonly analysisAbortController: AbortController;
   readonly thumbnailAbortController: AbortController;
   analysisTimeline: ExposureTimeline | null;
@@ -48,30 +52,33 @@ export class ApplicationService {
     await this.#session?.thumbnailCache.clear();
     await this.#session?.playback.clear();
     const timing = await probeVideo(sourcePath);
+    const sourceFingerprint = await sourceContentFingerprint(sourcePath);
     const cache = new FrameProxyCache({
       sourcePath,
+      sourceFingerprint,
       timing,
       cacheRoot: this.cacheRoot,
     });
     const thumbnailCache = new FrameProxyCache({
       sourcePath,
+      sourceFingerprint,
       timing,
       cacheRoot: this.cacheRoot,
       widthLimit: 160,
       prefetchRadius: 0,
       maxEntries: 100,
     });
-    const playback = new PlaybackProxy({ sourcePath, timing, cacheRoot: this.cacheRoot });
-    // Persistent reuse waits for the source-content fingerprint work. Clearing
-    // here prevents a replaced source file from showing stale proxies.
-    await Promise.all([cache.clear(), thumbnailCache.clear(), playback.clear()]);
+    const playback = new PlaybackProxy({ sourcePath, sourceFingerprint, timing, cacheRoot: this.cacheRoot });
+    const project = new AnalysisProject(sourcePath);
     const playbackPath = await playback.create();
     const session: VideoSession = {
       sourcePath,
+      sourceFingerprint,
       timing,
       cache,
       thumbnailCache,
       playback,
+      project,
       analysisAbortController: new AbortController(),
       thumbnailAbortController: new AbortController(),
       analysisTimeline: null,
@@ -172,6 +179,7 @@ export class ApplicationService {
     if (!session) throw new Error("Open a video before applying an exposure correction");
     if (!session.analysisTimeline) throw new Error("Exposure analysis is not ready");
     const corrected = applyExposureCorrection(session.analysisTimeline, action);
+    session.project.saveCorrection(corrected);
     session.correctionUndoStack.push(session.analysisTimeline);
     session.correctionRedoStack.length = 0;
     session.analysisTimeline = corrected;
@@ -180,8 +188,10 @@ export class ApplicationService {
   async undoExposureCorrection(): Promise<void> {
     const session = this.#session;
     if (!session?.analysisTimeline) throw new Error("Exposure analysis is not ready");
-    const previous = session.correctionUndoStack.pop();
+    const previous = session.correctionUndoStack.at(-1);
     if (!previous) return;
+    session.project.saveCorrection(previous);
+    session.correctionUndoStack.pop();
     session.correctionRedoStack.push(session.analysisTimeline);
     session.analysisTimeline = previous;
   }
@@ -189,8 +199,10 @@ export class ApplicationService {
   async redoExposureCorrection(): Promise<void> {
     const session = this.#session;
     if (!session?.analysisTimeline) throw new Error("Exposure analysis is not ready");
-    const next = session.correctionRedoStack.pop();
+    const next = session.correctionRedoStack.at(-1);
     if (!next) return;
+    session.project.saveCorrection(next);
+    session.correctionRedoStack.pop();
     session.correctionUndoStack.push(session.analysisTimeline);
     session.analysisTimeline = next;
   }
@@ -246,17 +258,29 @@ export class ApplicationService {
     this.#exportAbortController?.abort();
   }
 
+  async clearUnusedCache(): Promise<CacheCleanupResult> {
+    const session = this.#session;
+    if (session && !session.analysisTimeline && !session.analysisError) {
+      throw new Error("Wait for background analysis to finish before clearing the cache");
+    }
+    const preserved = session
+      ? [session.cache.directory, session.thumbnailCache.directory, session.playback.directory]
+      : [];
+    return clearCacheDirectories(this.cacheRoot, preserved);
+  }
+
   async #analyze(session: VideoSession): Promise<void> {
     const signal = session.analysisAbortController.signal;
     try {
       const proxyCache = new AnalysisProxyCache({
         sourcePath: session.sourcePath,
+        sourceFingerprint: session.sourceFingerprint,
         timing: session.timing,
         cacheRoot: this.cacheRoot,
       });
       const identity = await proxyCache.identity();
-      const project = new AnalysisProject(session.sourcePath);
-      const resolved = await project.loadCompletedOrAnalyze(identity, async () => {
+      session.project.saveSource(session.timing, identity.sourceFingerprint);
+      const resolved = await session.project.loadCompletedOrAnalyze(identity, async () => {
         const reportProgress = (progress: AnalysisJobProgress) => {
           if (!signal.aborted) session.analysisProgress = progress;
         };

@@ -6,6 +6,7 @@ import type { NormalizedTiming } from "./timing.js";
 
 export interface PlaybackProxyOptions {
   readonly sourcePath: string;
+  readonly sourceFingerprint: string;
   readonly timing: NormalizedTiming;
   readonly cacheRoot: string;
   readonly ffmpegExecutable?: string;
@@ -19,6 +20,10 @@ export class PlaybackProxy {
   readonly #ffmpegExecutable: string;
   readonly #widthLimit: number;
 
+  get directory(): string {
+    return this.#directory;
+  }
+
   constructor(options: PlaybackProxyOptions) {
     if (!Number.isSafeInteger(options.widthLimit ?? 1280) || (options.widthLimit ?? 1280) < 16) {
       throw new Error("widthLimit must be an integer of at least 16 pixels");
@@ -26,12 +31,13 @@ export class PlaybackProxy {
     this.#sourcePath = resolve(options.sourcePath);
     this.#ffmpegExecutable = options.ffmpegExecutable ?? "ffmpeg";
     this.#widthLimit = options.widthLimit ?? 1280;
+    if (!options.sourceFingerprint.startsWith("sha256:")) {
+      throw new Error("A SHA-256 source fingerprint is required for the playback cache");
+    }
     const sourceKey = createHash("sha256")
-      .update(this.#sourcePath)
+      .update(options.sourceFingerprint)
       .update("\0")
-      .update(options.timing.frameCount.toString())
-      .update("\0")
-      .update(JSON.stringify(options.timing.firstPresentationTimestamp))
+      .update(this.#widthLimit.toString())
       .digest("hex")
       .slice(0, 20);
     this.#directory = join(resolve(options.cacheRoot), `${basename(this.#sourcePath)}-${sourceKey}-playback`);

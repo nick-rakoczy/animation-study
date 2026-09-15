@@ -13,6 +13,7 @@ export interface FrameProxy {
 
 export interface FrameProxyCacheOptions {
   readonly sourcePath: string;
+  readonly sourceFingerprint: string;
   readonly timing: NormalizedTiming;
   readonly cacheRoot: string;
   readonly ffmpegExecutable?: string;
@@ -36,6 +37,10 @@ export class FrameProxyCache {
   readonly #recentlyUsed = new Map<number, string>();
   #activeDecode: Promise<void> | null = null;
 
+  get directory(): string {
+    return this.#directory;
+  }
+
   constructor(options: FrameProxyCacheOptions) {
     if (!Number.isSafeInteger(options.widthLimit ?? 1280) || (options.widthLimit ?? 1280) < 16) {
       throw new Error("widthLimit must be an integer of at least 16 pixels");
@@ -53,12 +58,11 @@ export class FrameProxyCache {
     this.#widthLimit = options.widthLimit ?? 1280;
     this.#prefetchRadius = options.prefetchRadius ?? 2;
     this.#maxEntries = options.maxEntries ?? 180;
+    if (!options.sourceFingerprint.startsWith("sha256:")) {
+      throw new Error("A SHA-256 source fingerprint is required for the frame cache");
+    }
     const sourceKey = createHash("sha256")
-      .update(this.#sourcePath)
-      .update("\0")
-      .update(this.#timing.frameCount.toString())
-      .update("\0")
-      .update(JSON.stringify(this.#timing.firstPresentationTimestamp))
+      .update(options.sourceFingerprint)
       .update("\0")
       .update(this.#widthLimit.toString())
       .digest("hex")

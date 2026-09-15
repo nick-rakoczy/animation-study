@@ -11,6 +11,8 @@ The media code also includes a bounded display-proxy cache. It seeks to an index
 - Node.js 22 or newer
 - `ffmpeg` and `ffprobe` on `PATH`
 
+See [FFmpeg installation instructions](docs/FFMPEG_INSTALLATION.md) for Linux and Windows setup.
+
 ## Run the probe
 
 ```sh
@@ -36,3 +38,18 @@ The current viewer opens a local video, shows the first indexed frame, and steps
 ```sh
 npm test
 ```
+
+## Build the Linux release
+
+```sh
+npm run dist:linux
+```
+
+The x86-64 artifact is `release/Animation-Study-<version>-x86_64.AppImage`. Make it executable and run it directly:
+
+```sh
+chmod +x Animation-Study-0.1.0-x86_64.AppImage
+./Animation-Study-0.1.0-x86_64.AppImage
+```
+
+AppImage normally uses FUSE. On a system without FUSE, run it with `APPIMAGE_EXTRACT_AND_RUN=1` or use `--appimage-extract` and start the extracted `AppRun` file.

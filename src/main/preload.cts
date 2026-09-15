@@ -15,6 +15,7 @@ const api: AnimationStudyApi = {
   getTimelineThumbnails: (sampleCount) => ipcRenderer.invoke("media:get-timeline-thumbnails", sampleCount),
   exportSelection: (range) => ipcRenderer.invoke("media:export-selection", range),
   cancelExport: () => ipcRenderer.invoke("media:cancel-export"),
+  clearUnusedCache: () => ipcRenderer.invoke("media:clear-unused-cache"),
 };
 
 contextBridge.exposeInMainWorld("animationStudy", api);

@@ -12,6 +12,7 @@ export interface ExposureExportOptions {
   readonly range: InclusiveTimelineRange;
   readonly ffmpegExecutable?: string;
   readonly signal?: AbortSignal;
+  readonly commitFile?: typeof copyFile;
 }
 
 export interface ExposureExportResult {
@@ -48,7 +49,6 @@ export async function exportExposureSelection(
       options.ffmpegExecutable ?? "ffmpeg",
       [
         "-v", "error",
-        "-autorotate",
         "-i", resolve(options.sourcePath),
         "-map", "0:v:0",
         "-an",
@@ -71,7 +71,11 @@ export async function exportExposureSelection(
       for (const name of names) {
         throwIfCancelled(options.signal);
         const destination = join(finalDirectory, name);
-        await copyFile(join(stagingDirectory, name), destination, constants.COPYFILE_EXCL);
+        await (options.commitFile ?? copyFile)(
+          join(stagingDirectory, name),
+          destination,
+          constants.COPYFILE_EXCL,
+        );
         committedPaths.push(destination);
       }
       return {

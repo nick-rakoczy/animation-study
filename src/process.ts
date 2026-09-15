@@ -56,7 +56,9 @@ export function runProcess(
       if (signal?.aborted) {
         reject(new ProcessError(`${executable} was cancelled`, executable, args, result));
       } else if (result.exitCode !== 0) {
-        reject(new ProcessError(`${executable} exited with code ${result.exitCode}`, executable, args, result));
+        const diagnostic = result.stderr.trim();
+        const suffix = diagnostic.length > 0 ? `: ${diagnostic}` : "";
+        reject(new ProcessError(`${executable} exited with code ${result.exitCode}${suffix}`, executable, args, result));
       } else {
         resolve(result);
       }

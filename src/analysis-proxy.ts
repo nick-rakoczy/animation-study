@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { access, mkdir, rename, rm, stat } from "node:fs/promises";
+import { access, mkdir, rename, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { runProcess } from "./process.js";
 import type { NormalizedTiming } from "./timing.js";
+import { sourceContentFingerprint } from "./source-fingerprint.js";
 import {
   AnalysisCancelledError,
   reportAnalysisProgress,
@@ -38,6 +39,7 @@ export interface AnalysisProxyCacheOptions {
   readonly cacheRoot: string;
   readonly ffmpegExecutable?: string;
   readonly settings?: Partial<AnalysisProxySettings>;
+  readonly sourceFingerprint?: string;
 }
 
 const defaultSettings: AnalysisProxySettings = {
@@ -53,6 +55,7 @@ export class AnalysisProxyCache {
   readonly #cacheRoot: string;
   readonly #ffmpegExecutable: string;
   readonly #settings: AnalysisProxySettings;
+  readonly #providedSourceFingerprint: string | undefined;
   #directory: string | null = null;
 
   constructor(options: AnalysisProxyCacheOptions) {
@@ -61,6 +64,7 @@ export class AnalysisProxyCache {
     this.#cacheRoot = resolve(options.cacheRoot);
     this.#ffmpegExecutable = options.ffmpegExecutable ?? "ffmpeg";
     this.#settings = { ...defaultSettings, ...options.settings };
+    this.#providedSourceFingerprint = options.sourceFingerprint;
     validateSettings(this.#settings);
   }
 
@@ -150,18 +154,7 @@ export class AnalysisProxyCache {
   }
 
   async #sourceFingerprint(): Promise<string> {
-    const sourceStat = await stat(this.#sourcePath, { bigint: true });
-    return createHash("sha256")
-      .update(this.#sourcePath)
-      .update("\0")
-      .update(sourceStat.size.toString())
-      .update("\0")
-      .update(sourceStat.mtimeNs.toString())
-      .update("\0")
-      .update(this.#timing.frameCount.toString())
-      .update("\0")
-      .update(JSON.stringify(this.#timing.firstPresentationTimestamp))
-      .digest("hex");
+    return this.#providedSourceFingerprint ?? sourceContentFingerprint(this.#sourcePath);
   }
 }
 
