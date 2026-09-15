@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { AnalysisProxyCache } from "../src/analysis-proxy.js";
 import { AnalysisScoreCache } from "../src/analysis-score.js";
+import { AnalysisCancelledError, type AnalysisJobProgress } from "../src/analysis-job.js";
 import { classifyBoundaries } from "../src/boundary-classifier.js";
 import { createContactSheet } from "../src/contact-sheet.js";
 import { buildExposureSpans } from "../src/exposure-span.js";
@@ -265,11 +266,24 @@ test("creates cached luma, chroma, and edge analysis proxies", async (context) =
   const timing = await probeVideo(sourcePath);
   assert.equal(timing.frameCount, 3);
   const cache = new AnalysisProxyCache({ sourcePath, timing, cacheRoot: join(directory, "cache") });
-  const proxy = await cache.create();
+  const proxyProgress: AnalysisJobProgress[] = [];
+  const proxy = await cache.create(undefined, (progress) => proxyProgress.push(progress));
+  assert.equal(proxyProgress[0]?.stage, "analysis-proxy");
+  assert.equal(proxyProgress[0]?.completedFrames, 0);
+  assert.equal(proxyProgress.at(-1)?.completedFrames, timing.frameCount);
+  assert.equal(proxyProgress.at(-1)?.fraction, 1);
   const firstModifiedTime = (await stat(proxy.path)).mtimeMs;
-  const reusedProxy = await cache.create();
+  const reusedProgress: AnalysisJobProgress[] = [];
+  const reusedProxy = await cache.create(undefined, (progress) => reusedProgress.push(progress));
   assert.equal(reusedProxy.path, proxy.path);
   assert.equal((await stat(reusedProxy.path)).mtimeMs, firstModifiedTime);
+  assert.deepEqual(reusedProgress, [{
+    stage: "analysis-proxy",
+    completedFrames: 3,
+    totalFrames: 3,
+    fraction: 1,
+    cached: true,
+  }]);
   assert.equal(proxy.frameCount, 3);
   assert.deepEqual(proxy.settings, {
     width: 64,
@@ -345,7 +359,16 @@ test("creates cached luma, chroma, and edge analysis proxies", async (context) =
   assert.ok(byteTotal(dividedEdges) > byteTotal(blackEdges));
 
   const scoreCache = new AnalysisScoreCache(proxy);
-  const scores = await scoreCache.create();
+  const scoreProgress: AnalysisJobProgress[] = [];
+  const scores = await scoreCache.create(undefined, (progress) => scoreProgress.push(progress));
+  assert.deepEqual(
+    scoreProgress.filter((progress) => progress.completedFrames === 0).map((progress) => progress.stage),
+    ["luma-chroma-scores", "edge-scores"],
+  );
+  assert.deepEqual(
+    scoreProgress.filter((progress) => progress.fraction === 1).map((progress) => progress.stage),
+    ["luma-chroma-scores", "edge-scores"],
+  );
   assert.deepEqual(scores.boundaries.map((boundary) => [
     boundary.fromTimelinePosition,
     boundary.toTimelinePosition,
@@ -379,6 +402,20 @@ test("creates cached luma, chroma, and edge analysis proxies", async (context) =
   const alternateProxy = await alternateCache.create();
   assert.equal(alternateProxy.sourceFingerprint, proxy.sourceFingerprint);
   assert.notEqual(alternateProxy.path, proxy.path);
+  const abortController = new AbortController();
+  const cancelledScoreCache = new AnalysisScoreCache(alternateProxy);
+  await assert.rejects(
+    cancelledScoreCache.create(abortController.signal, (progress) => {
+      if (progress.stage === "luma-chroma-scores" && progress.completedFrames === 1) {
+        abortController.abort();
+      }
+    }),
+    (error) => error instanceof AnalysisCancelledError,
+  );
+  assert.deepEqual(
+    (await readdir(dirname(alternateProxy.path))).filter((entry) => entry.startsWith("component-scores")),
+    [],
+  );
   await Promise.all([cache.clear(), alternateCache.clear()]);
 });
 

@@ -23,6 +23,7 @@ export function runProcess(
   executable: string,
   args: readonly string[],
   signal?: AbortSignal,
+  onStdout?: (chunk: string) => void,
 ): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
@@ -35,11 +36,15 @@ export function runProcess(
     let stderr = "";
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => (stdout += chunk));
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+      onStdout?.(chunk);
+    });
     child.stderr.on("data", (chunk: string) => (stderr += chunk));
 
     const abort = () => child.kill("SIGTERM");
     signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
 
     child.on("error", (error) => {
       signal?.removeEventListener("abort", abort);

@@ -3,6 +3,12 @@ import { spawn } from "node:child_process";
 import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { AnalysisProxy, AnalysisProxySettings } from "./analysis-proxy.js";
+import {
+  AnalysisCancelledError,
+  reportAnalysisProgress,
+  throwIfAnalysisCancelled,
+  type AnalysisProgressHandler,
+} from "./analysis-job.js";
 
 export interface FrameComponentScore {
   readonly fromTimelinePosition: number;
@@ -32,11 +38,16 @@ export class AnalysisScoreCache {
     this.#path = join(dirname(proxy.path), "component-scores-v1.json");
   }
 
-  async create(signal?: AbortSignal): Promise<AnalysisScores> {
+  async create(signal?: AbortSignal, onProgress?: AnalysisProgressHandler): Promise<AnalysisScores> {
+    throwIfAnalysisCancelled(signal);
     const cached = await this.#readCached();
-    if (cached) return cached;
+    if (cached) {
+      reportAnalysisProgress(onProgress, "luma-chroma-scores", this.#proxy.frameCount, this.#proxy.frameCount, true);
+      reportAnalysisProgress(onProgress, "edge-scores", this.#proxy.frameCount, this.#proxy.frameCount, true);
+      return cached;
+    }
 
-    const boundaries = await this.#calculate(signal);
+    const boundaries = await this.#calculate(signal, onProgress);
     const scores: AnalysisScores = {
       schemaVersion: 1,
       sourceFingerprint: this.#proxy.sourceFingerprint,
@@ -54,11 +65,15 @@ export class AnalysisScoreCache {
     return scores;
   }
 
-  async #calculate(signal?: AbortSignal): Promise<readonly FrameComponentScore[]> {
+  async #calculate(
+    signal?: AbortSignal,
+    onProgress?: AnalysisProgressHandler,
+  ): Promise<readonly FrameComponentScore[]> {
     const { width, height } = this.#proxy.settings;
     const pixelsPerFrame = width * height;
     const colorScores: { lumaDifference: number; chromaDifference: number }[] = [];
     let previousColor: Buffer | null = null;
+    reportAnalysisProgress(onProgress, "luma-chroma-scores", 0, this.#proxy.frameCount);
     await streamRawFrames({
       executable: this.#ffmpegExecutable,
       args: [
@@ -73,7 +88,7 @@ export class AnalysisScoreCache {
       bytesPerFrame: pixelsPerFrame * 3,
       expectedFrameCount: this.#proxy.frameCount,
       signal,
-      onFrame: (frame) => {
+      onFrame: (frame, frameIndex) => {
         if (previousColor) {
           colorScores.push({
             lumaDifference: normalizedDifference(previousColor, frame, 0, pixelsPerFrame),
@@ -81,11 +96,13 @@ export class AnalysisScoreCache {
           });
         }
         previousColor = frame;
+        reportAnalysisProgress(onProgress, "luma-chroma-scores", frameIndex + 1, this.#proxy.frameCount);
       },
     });
 
     const edgeScores: number[] = [];
     let previousEdge: Buffer | null = null;
+    reportAnalysisProgress(onProgress, "edge-scores", 0, this.#proxy.frameCount);
     await streamRawFrames({
       executable: this.#ffmpegExecutable,
       args: [
@@ -100,9 +117,10 @@ export class AnalysisScoreCache {
       bytesPerFrame: pixelsPerFrame,
       expectedFrameCount: this.#proxy.frameCount,
       signal,
-      onFrame: (frame) => {
+      onFrame: (frame, frameIndex) => {
         if (previousEdge) edgeScores.push(normalizedDifference(previousEdge, frame, 0, pixelsPerFrame));
         previousEdge = frame;
+        reportAnalysisProgress(onProgress, "edge-scores", frameIndex + 1, this.#proxy.frameCount);
       },
     });
 
@@ -161,6 +179,10 @@ function streamRawFrames(options: RawFrameStreamOptions): Promise<void> {
       try {
         pending = pending.length === 0 ? chunk : Buffer.concat([pending, chunk]);
         while (pending.length >= options.bytesPerFrame) {
+          if (options.signal?.aborted) {
+            child.kill("SIGTERM");
+            return;
+          }
           const frame = Buffer.from(pending.subarray(0, options.bytesPerFrame));
           pending = pending.subarray(options.bytesPerFrame);
           options.onFrame(frame, frameCount);
@@ -174,7 +196,7 @@ function streamRawFrames(options: RawFrameStreamOptions): Promise<void> {
     child.on("error", (error) => finish(error));
     child.on("close", (code) => {
       if (callbackError) return finish(callbackError);
-      if (options.signal?.aborted) return finish(new Error(`${options.executable} was cancelled`));
+      if (options.signal?.aborted) return finish(new AnalysisCancelledError());
       if (code !== 0) return finish(new Error(`${options.executable} exited with code ${code ?? -1}: ${stderr.trim()}`));
       if (pending.length !== 0) return finish(new Error(`Raw analysis output ended with ${pending.length} incomplete bytes`));
       if (frameCount !== options.expectedFrameCount) {

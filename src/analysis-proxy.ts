@@ -3,6 +3,12 @@ import { access, mkdir, rename, rm, stat } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { runProcess } from "./process.js";
 import type { NormalizedTiming } from "./timing.js";
+import {
+  AnalysisCancelledError,
+  reportAnalysisProgress,
+  throwIfAnalysisCancelled,
+  type AnalysisProgressHandler,
+} from "./analysis-job.js";
 
 export interface AnalysisProxySettings {
   readonly width: number;
@@ -52,8 +58,10 @@ export class AnalysisProxyCache {
     validateSettings(this.#settings);
   }
 
-  async create(signal?: AbortSignal): Promise<AnalysisProxy> {
+  async create(signal?: AbortSignal, onProgress?: AnalysisProgressHandler): Promise<AnalysisProxy> {
+    throwIfAnalysisCancelled(signal);
     const sourceFingerprint = await this.#sourceFingerprint();
+    throwIfAnalysisCancelled(signal);
     const settingsKey = createHash("sha256")
       .update(sourceFingerprint)
       .update("\0")
@@ -67,6 +75,8 @@ export class AnalysisProxyCache {
     if (!(await fileExists(path))) {
       await mkdir(directory, { recursive: true });
       const temporaryPath = join(directory, `analysis-${randomUUID()}.mkv`);
+      const progress = createFfmpegProgressReporter(this.#timing.frameCount, onProgress);
+      reportAnalysisProgress(onProgress, "analysis-proxy", 0, this.#timing.frameCount);
       const filter = [
         `[0:v:0]scale=${this.#settings.width}:${this.#settings.height}:flags=area,format=yuv444p,split=2[color][edge-source]`,
         `[edge-source]edgedetect=low=${this.#settings.edgeLowThreshold}:high=${this.#settings.edgeHighThreshold},format=gray[edge]`,
@@ -75,6 +85,8 @@ export class AnalysisProxyCache {
       try {
         await runProcess(this.#ffmpegExecutable, [
           "-v", "error",
+          "-progress", "pipe:1",
+          "-nostats",
           "-i", this.#sourcePath,
           "-filter_complex", filter,
           "-map", "[color]",
@@ -88,11 +100,24 @@ export class AnalysisProxyCache {
           "-map_metadata", "-1",
           "-y",
           temporaryPath,
-        ], signal);
+        ], signal, progress);
+        throwIfAnalysisCancelled(signal);
         await rename(temporaryPath, path);
+        reportAnalysisProgress(onProgress, "analysis-proxy", this.#timing.frameCount, this.#timing.frameCount);
+      } catch (error) {
+        if (signal?.aborted) throw new AnalysisCancelledError();
+        throw error;
       } finally {
         await rm(temporaryPath, { force: true });
       }
+    } else {
+      reportAnalysisProgress(
+        onProgress,
+        "analysis-proxy",
+        this.#timing.frameCount,
+        this.#timing.frameCount,
+        true,
+      );
     }
 
     return {
@@ -124,6 +149,27 @@ export class AnalysisProxyCache {
       .update(JSON.stringify(this.#timing.firstPresentationTimestamp))
       .digest("hex");
   }
+}
+
+function createFfmpegProgressReporter(
+  totalFrames: number,
+  handler: AnalysisProgressHandler | undefined,
+): (chunk: string) => void {
+  let pending = "";
+  let lastReportedFrame = 0;
+  return (chunk) => {
+    pending += chunk;
+    const lines = pending.split(/\r?\n/);
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      const match = /^frame=(\d+)$/.exec(line.trim());
+      if (!match) continue;
+      const frame = Math.min(Number(match[1]), totalFrames);
+      if (frame <= lastReportedFrame) continue;
+      lastReportedFrame = frame;
+      reportAnalysisProgress(handler, "analysis-proxy", frame, totalFrames);
+    }
+  };
 }
 
 function validateSettings(settings: AnalysisProxySettings): void {
