@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Sensitivity setting and reset behavior.
+Analysis job progress and cancellation.
 
 ## Phase 0: decisions and technical proofs
 
@@ -51,8 +51,8 @@ Sensitivity setting and reset behavior.
 - [x] Compare adjacent frames and store the component scores.
 - [x] Classify boundaries as same, changed, or uncertain with two thresholds.
 - [x] Build chronological exposure spans without merging non-adjacent matches.
-- [ ] Add the sensitivity setting and reset action.
-- [ ] Add selected-range reanalysis and a preview cel count.
+- [x] Add the sensitivity setting and reset action.
+- [x] Add selected-range reanalysis and a preview cel count.
 - [ ] Add job progress and cancellation.
 - [ ] Save partial and completed analysis results to the sidecar project.
 - [ ] Load saved analysis without rerunning completed work.
@@ -116,7 +116,7 @@ Sensitivity setting and reset behavior.
 
 | Date | Check | Result |
 | --- | --- | --- |
-| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, and renderer asset-path tests |
+| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, sensitivity and selected-range analysis, and renderer asset-path tests |
 | 2026-09-14 | `npm run typecheck` | Passed core and renderer TypeScript checks |
 | 2026-09-14 | `npm run build` | Passed TypeScript and production renderer builds |
 | 2026-09-14 | Constant-rate fixture at `24000/1001` | Returned 24 indexed frames with exact rational timing |
@@ -132,12 +132,14 @@ Sensitivity setting and reset behavior.
 | 2026-09-14 | Adjacent-frame scoring fixture | Streamed the analysis proxy with bounded memory, stored normalized component scores for both boundaries, and reused the validated score file |
 | 2026-09-14 | Boundary classification tests | Applied inclusive same and changed thresholds with an uncertain interval; the decoded color and edge changes classified as changed |
 | 2026-09-14 | Exposure-span tests | Built chronological spans from changed boundaries, retained uncertain boundaries for review, and kept returning drawings in separate exposures |
+| 2026-09-14 | Sensitivity tests | Mapped the 0 through 100 setting to both thresholds, changed the exposure count without rescoring frames, and reset to the default value of 50 |
+| 2026-09-14 | Selected-range analysis tests | Reclassified only internal boundaries at the requested sensitivity, previewed the resulting cel count, handled one-frame selections, and rejected invalid ranges |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
 - The frame-by-frame filmstrip timeline does not exist yet.
-- Sensitivity controls, cel information, corrections, sidecar persistence, and export do not exist yet.
+- Analysis job progress and cancellation, cel information, corrections, sidecar persistence, and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.
