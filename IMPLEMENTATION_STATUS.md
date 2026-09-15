@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Detector fixture set and threshold tuning.
+Selected-cel information.
 
 ## Phase 0: decisions and technical proofs
 
@@ -14,7 +14,7 @@ Detector fixture set and threshold tuning.
 - [x] Clarify that synchronized audio playback is required and waveform display is not required.
 - [x] Build the command-line timing probe specified by the plan.
 - [x] Confirm that the Electron renderer starts on Linux.
-- [ ] Collect the full fixture set for clean holds, compression noise, camera motion, dissolves, variable frame rate, and returning drawings.
+- [x] Collect the full fixture set for clean holds, compression noise, camera motion, dissolves, variable frame rate, and returning drawings.
 - [ ] Complete the Clip Studio Paint compatibility test on Windows.
 - [x] Test the playback design on Linux.
 - [ ] Test the playback design on Windows.
@@ -56,7 +56,7 @@ Detector fixture set and threshold tuning.
 - [x] Add job progress and cancellation.
 - [x] Save partial and completed analysis results to the sidecar project.
 - [x] Load saved analysis without rerunning completed work.
-- [ ] Tune the detector against the fixture set.
+- [x] Tune the detector against the fixture set.
 
 ## Phase 3: study interface
 
@@ -116,7 +116,7 @@ Detector fixture set and threshold tuning.
 
 | Date | Check | Result |
 | --- | --- | --- |
-| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, sidecar save and load, job cancellation, and renderer asset-path tests |
+| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, detector fixtures, sidecar save and load, job cancellation, and renderer asset-path tests |
 | 2026-09-14 | `npm run typecheck` | Passed core and renderer TypeScript checks |
 | 2026-09-14 | `npm run build` | Passed TypeScript and production renderer builds |
 | 2026-09-14 | Constant-rate fixture at `24000/1001` | Returned 24 indexed frames with exact rational timing |
@@ -137,6 +137,7 @@ Detector fixture set and threshold tuning.
 | 2026-09-14 | Analysis job tests | Reported frame progress for proxy generation and both scoring passes, reported cache hits, cancelled scoring after one frame, and left no partial score file |
 | 2026-09-14 | Analysis sidecar tests | Created a SQLite `.animstudy` file, saved a partial score prefix, replaced it with a validated completed analysis in one transaction, and preserved the prior snapshot after invalid input |
 | 2026-09-14 | Analysis reload tests | Reconstructed scores and exposures from a matching completed sidecar without calling the analyzer, treated partial and mismatched data as cache misses, and rejected inconsistent completed rows without rerunning work |
+| 2026-09-14 | Detector fixture suite | Classified clean and noisy holds, camera motion, a dissolve, variable frame rate, a returning drawing, and a one-frame drawing at the defaults; the noisy-hold maximum was 0.000361 and the deliberate-change minimum was 0.107789 |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
