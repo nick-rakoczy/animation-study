@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Cel navigation with `Shift+Left` and `Shift+Right`.
+Split, merge, representative-frame selection, and boundary confirmation.
 
 ## Phase 0: decisions and technical proofs
 
@@ -73,7 +73,7 @@ Cel navigation with `Shift+Left` and `Shift+Right`.
 - [x] Add horizontal timeline scrolling.
 - [x] Add `+` and `-` timeline scale controls.
 - [x] Add inclusive timeline range selection.
-- [ ] Add `Shift+Left` and `Shift+Right` cel navigation.
+- [x] Add `Shift+Left` and `Shift+Right` cel navigation.
 - [ ] Add split, merge, representative-frame selection, and boundary confirmation.
 - [ ] Add undo and redo for every correction.
 - [ ] Add accessible focus behavior and complete keyboard coverage.
@@ -145,6 +145,7 @@ Cel navigation with `Shift+Left` and `Shift+Right`.
 | 2026-09-14 | Horizontal filmstrip scrolling test | Kept thumbnails at a fixed display height in a content-width row, enabled native horizontal overflow, and mapped vertical wheel input to horizontal movement |
 | 2026-09-14 | Timeline scale tests | Changed filmstrip sampling through five bounded density levels, skipped ineffective levels for short sources, and added button and keyboard controls |
 | 2026-09-14 | Inclusive timeline range tests | Normalized forward and reverse drags, counted both endpoint frames, gave one-frame ranges visible width, and added range-mode and Shift-drag controls |
+| 2026-09-14 | Adjacent-cel navigation tests | Resolved previous and next exposure starts from any frame in a hold, stopped at file boundaries, and bound the actions to shifted arrow keys |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build

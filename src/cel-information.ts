@@ -38,6 +38,25 @@ export function celInformationForFrame(
   };
 }
 
+export function adjacentCelStartPosition(
+  timeline: ExposureTimeline,
+  timelinePosition: number,
+  direction: "previous" | "next",
+): number | null {
+  if (direction !== "previous" && direction !== "next") {
+    throw new Error("Cel navigation direction must be previous or next");
+  }
+  if (!Number.isSafeInteger(timelinePosition) || timelinePosition < 0 || timelinePosition >= timeline.frameCount) {
+    throw new Error("Cel navigation requires a valid timeline position");
+  }
+  const currentIndex = timeline.spans.findIndex(
+    (span) => timelinePosition >= span.startTimelinePosition && timelinePosition <= span.endTimelinePosition,
+  );
+  if (currentIndex < 0) throw new Error(`No exposure contains timeline position ${timelinePosition}`);
+  const adjacentIndex = currentIndex + (direction === "previous" ? -1 : 1);
+  return timeline.spans[adjacentIndex]?.startTimelinePosition ?? null;
+}
+
 export function cadenceLabel(frameCount: number): string {
   if (!Number.isSafeInteger(frameCount) || frameCount < 1) {
     throw new Error("Cadence requires a positive frame count");

@@ -6,7 +6,7 @@ import {
   defaultAnalysisSensitivity,
 } from "../src/analysis-sensitivity.js";
 import { classifyBoundaries } from "../src/boundary-classifier.js";
-import { cadenceLabel, celInformationForFrame } from "../src/cel-information.js";
+import { adjacentCelStartPosition, cadenceLabel, celInformationForFrame } from "../src/cel-information.js";
 import { buildExposureSpans } from "../src/exposure-span.js";
 import { analyzeSelectedRange } from "../src/range-analysis.js";
 import type { AnalysisScores, FrameComponentScore } from "../src/analysis-score.js";
@@ -239,6 +239,10 @@ test("reports cel details with exact elapsed duration for variable frame timing"
     cadenceLabel: "On twos",
     elapsedDuration: { numerator: "1", denominator: "12" },
   });
+  assert.equal(adjacentCelStartPosition(timeline, 0, "previous"), null);
+  assert.equal(adjacentCelStartPosition(timeline, 1, "next"), 2);
+  assert.equal(adjacentCelStartPosition(timeline, 2, "previous"), 0);
+  assert.equal(adjacentCelStartPosition(timeline, 3, "next"), null);
 });
 
 test("derives cadence labels from exact source-frame hold counts", () => {

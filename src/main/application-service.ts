@@ -6,14 +6,14 @@ import { AnalysisProject } from "../analysis-project.js";
 import { AnalysisProxyCache } from "../analysis-proxy.js";
 import { AnalysisScoreCache } from "../analysis-score.js";
 import { AnalysisSensitivity, defaultAnalysisSensitivity } from "../analysis-sensitivity.js";
-import { celInformationForFrame } from "../cel-information.js";
+import { adjacentCelStartPosition, celInformationForFrame } from "../cel-information.js";
 import { chooseSamplePositions } from "../contact-sheet.js";
 import type { ExposureTimeline } from "../exposure-span.js";
 import { FrameProxyCache } from "../frame-cache.js";
 import { createPlaybackFrames } from "../playback.js";
 import { PlaybackProxy } from "../playback-proxy.js";
 import { probeVideo } from "../probe.js";
-import type { CelInformation, DisplayFrame, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
+import type { CelInformation, CelNavigationResult, DisplayFrame, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
 import type { NormalizedTiming } from "../timing.js";
 
 interface VideoSession {
@@ -109,6 +109,23 @@ export class ApplicationService {
     if (session.analysisError) return { status: "failed", error: session.analysisError };
     if (!session.analysisTimeline) return { status: "pending" };
     return celInformationForFrame(session.timing, session.analysisTimeline, timelinePosition);
+  }
+
+  async getAdjacentCelPosition(
+    timelinePosition: number,
+    direction: "previous" | "next",
+  ): Promise<CelNavigationResult> {
+    const session = this.#session;
+    if (!session) throw new Error("Open a video before navigating cels");
+    if (!session.timing.frames[timelinePosition]) {
+      throw new Error(`Timeline position ${timelinePosition} is outside the source`);
+    }
+    if (session.analysisError) return { status: "failed", error: session.analysisError };
+    if (!session.analysisTimeline) return { status: "pending" };
+    return {
+      status: "ready",
+      timelinePosition: adjacentCelStartPosition(session.analysisTimeline, timelinePosition, direction),
+    };
   }
 
   async getTimelineThumbnails(sampleCount: number): Promise<readonly TimelineThumbnail[]> {

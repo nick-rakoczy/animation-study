@@ -474,6 +474,18 @@ test("opens the viewer with pending cel data and fills it after background analy
     cadenceLabel: "On twos",
     elapsedDuration: { numerator: "1", denominator: "2" },
   });
+  assert.deepEqual(await service.getAdjacentCelPosition(1, "next"), {
+    status: "ready",
+    timelinePosition: 2,
+  });
+  assert.deepEqual(await service.getAdjacentCelPosition(3, "previous"), {
+    status: "ready",
+    timelinePosition: 0,
+  });
+  assert.deepEqual(await service.getAdjacentCelPosition(0, "previous"), {
+    status: "ready",
+    timelinePosition: null,
+  });
   assert.ok((await stat(`${sourcePath}.animstudy`)).size > 0);
 });
 

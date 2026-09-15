@@ -71,3 +71,12 @@ test("timeline supports inclusive pointer range selection", async () => {
   assert.match(source, /className="timeline-range-selection"/);
   assert.match(source, /Clear timeline range/);
 });
+
+test("shifted arrow keys navigate adjacent cels", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  assert.match(source, /event\.key === "ArrowLeft" && event\.shiftKey/);
+  assert.match(source, /event\.key === "ArrowRight" && event\.shiftKey/);
+  assert.match(source, /navigateCel\("previous"\)/);
+  assert.match(source, /navigateCel\("next"\)/);
+  assert.match(source, /getAdjacentCelPosition/);
+});

@@ -146,6 +146,21 @@ export function App() {
     ));
   }, [video]);
 
+  const navigateCel = useCallback(async (direction: "previous" | "next") => {
+    if (!video) return;
+    setError(null);
+    try {
+      const result = await window.animationStudy.getAdjacentCelPosition(timelinePosition, direction);
+      if (result.status === "failed") {
+        setError(result.error);
+      } else if (result.status === "ready" && result.timelinePosition !== null) {
+        showFrame(result.timelinePosition);
+      }
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+  }, [showFrame, timelinePosition, video]);
+
   const togglePlayback = useCallback(async () => {
     const element = videoElement.current;
     const playbackPosition = element?.ended ? 0 : timelinePosition;
@@ -213,13 +228,17 @@ export function App() {
         void togglePlayback();
         return;
       }
-      const previous = event.key === "ArrowLeft" || event.key === ",";
-      const next = event.key === "ArrowRight" || event.key === ".";
       const timelineShortcutAllowed = !isInteractiveTarget(event.target) && !event.ctrlKey && !event.metaKey && !event.altKey;
+      const previousCel = event.key === "ArrowLeft" && event.shiftKey && timelineShortcutAllowed;
+      const nextCel = event.key === "ArrowRight" && event.shiftKey && timelineShortcutAllowed;
+      const previous = (event.key === "ArrowLeft" && !event.shiftKey || event.key === ",") && timelineShortcutAllowed;
+      const next = (event.key === "ArrowRight" && !event.shiftKey || event.key === ".") && timelineShortcutAllowed;
       const scaleIn = event.key === "+" && timelineShortcutAllowed;
       const scaleOut = event.key === "-" && timelineShortcutAllowed;
-      if (previous || next || scaleIn || scaleOut || event.key === "Home" || event.key === "End") event.preventDefault();
-      if (previous) void showFrame(timelinePosition - 1);
+      if (previousCel || nextCel || previous || next || scaleIn || scaleOut || event.key === "Home" || event.key === "End") event.preventDefault();
+      if (previousCel) void navigateCel("previous");
+      else if (nextCel) void navigateCel("next");
+      else if (previous) void showFrame(timelinePosition - 1);
       else if (next) void showFrame(timelinePosition + 1);
       else if (scaleIn) scaleTimeline(1);
       else if (scaleOut) scaleTimeline(-1);
@@ -228,7 +247,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [scaleTimeline, showFrame, timelinePosition, togglePlayback, video]);
+  }, [navigateCel, scaleTimeline, showFrame, timelinePosition, togglePlayback, video]);
 
   const toolDescription = tools?.available
     ? compactVersion(tools.ffmpegVersion)
