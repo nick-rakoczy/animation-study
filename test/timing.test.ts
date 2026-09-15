@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chooseSamplePositions } from "../src/contact-sheet.js";
 import { rationalToDecimal } from "../src/rational.js";
-import { createPlaybackFrames, timelinePositionAtPlaybackTime } from "../src/playback.js";
+import { createPlaybackFrames, playbackSeekTime, timelinePositionAtPlaybackTime } from "../src/playback.js";
 import { normalizeTiming, type RawProbe } from "../src/timing.js";
 
 test("maps constant-rate frames to zero-based positions and exact rational timing", () => {
@@ -99,6 +99,20 @@ test("maps variable-rate playback progress using each frame timestamp", () => {
   assert.equal(timelinePositionAtPlaybackTime(frames, 0.02), 1);
   assert.equal(timelinePositionAtPlaybackTime(frames, 0.099), 1);
   assert.equal(timelinePositionAtPlaybackTime(frames, 0.1), 2);
+});
+
+test("seeks inside an indexed playback frame instead of on its timestamp boundary", () => {
+  const timing = normalizeTiming(probeWithFrames([
+    { best_effort_timestamp: 0, pkt_duration: 20 },
+    { best_effort_timestamp: 20, pkt_duration: 80 },
+  ], "1/1000", "0/0"));
+  const frames = createPlaybackFrames(timing);
+
+  assert.equal(playbackSeekTime(frames[0]!), 0.01);
+  assert.equal(playbackSeekTime(frames[1]!), 0.06);
+  for (const frame of frames) {
+    assert.equal(timelinePositionAtPlaybackTime(frames, playbackSeekTime(frame)), frame.timelinePosition);
+  }
 });
 
 function probeWithFrames(

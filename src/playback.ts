@@ -35,6 +35,12 @@ export function timelinePositionAtPlaybackTime(
   return frames[Math.max(0, low - 1)]!.timelinePosition;
 }
 
+export function playbackSeekTime(frame: PlaybackFrame): number {
+  const start = rationalToNumber(frame.playbackTimestamp);
+  const duration = rationalToNumber(frame.presentationDuration);
+  return start + duration / 2;
+}
+
 function rationalToNumber(value: { readonly numerator: string; readonly denominator: string }): number {
   return Number(value.numerator) / Number(value.denominator);
 }

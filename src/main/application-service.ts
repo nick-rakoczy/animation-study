@@ -15,7 +15,7 @@ import { FrameProxyCache } from "../frame-cache.js";
 import { createPlaybackFrames } from "../playback.js";
 import { PlaybackProxy } from "../playback-proxy.js";
 import { probeVideo } from "../probe.js";
-import type { BackgroundAnalysisStatus, CelInformation, CelNavigationResult, CorrectionInformation, DisplayFrame, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
+import type { BackgroundAnalysisStatus, CelInformation, CelNavigationResult, CorrectionInformation, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
 import type { NormalizedTiming } from "../timing.js";
 import type { InclusiveTimelineRange } from "../timeline-range.js";
 import { sourceContentFingerprint } from "../source-fingerprint.js";
@@ -25,7 +25,6 @@ interface VideoSession {
   readonly sourcePath: string;
   readonly sourceFingerprint: string;
   readonly timing: NormalizedTiming;
-  readonly cache: FrameProxyCache;
   readonly thumbnailCache: FrameProxyCache;
   readonly playback: PlaybackProxy;
   readonly project: AnalysisProject;
@@ -53,12 +52,6 @@ export class ApplicationService {
     await this.#session?.playback.clear();
     const timing = await probeVideo(sourcePath);
     const sourceFingerprint = await sourceContentFingerprint(sourcePath);
-    const cache = new FrameProxyCache({
-      sourcePath,
-      sourceFingerprint,
-      timing,
-      cacheRoot: this.cacheRoot,
-    });
     const thumbnailCache = new FrameProxyCache({
       sourcePath,
       sourceFingerprint,
@@ -75,7 +68,6 @@ export class ApplicationService {
       sourcePath,
       sourceFingerprint,
       timing,
-      cache,
       thumbnailCache,
       playback,
       project,
@@ -89,7 +81,6 @@ export class ApplicationService {
       correctionRedoStack: [],
     };
     this.#session = session;
-    const frame = await this.getFrame(0);
     void this.#analyze(session);
     return {
       sourcePath,
@@ -100,23 +91,6 @@ export class ApplicationService {
       height: timing.stream.height,
       averageFrameRate: timing.stream.averageFrameRate,
       playbackFrames: createPlaybackFrames(timing),
-      frame,
-    };
-  }
-
-  async getFrame(timelinePosition: number): Promise<DisplayFrame> {
-    const session = this.#session;
-    if (!session) throw new Error("Open a video before requesting a frame");
-    const proxy = await session.cache.getFrame(timelinePosition);
-    const timing = session.timing.frames[timelinePosition]!;
-    const image = await readFile(proxy.path);
-    return {
-      timelinePosition,
-      displayFrameNumber: timing.displayFrameNumber,
-      frameCount: session.timing.frameCount,
-      presentationTimestamp: timing.presentationTimestamp,
-      presentationDuration: timing.presentationDuration,
-      imageDataUrl: `data:image/png;base64,${image.toString("base64")}`,
     };
   }
 
@@ -264,7 +238,7 @@ export class ApplicationService {
       throw new Error("Wait for background analysis to finish before clearing the cache");
     }
     const preserved = session
-      ? [session.cache.directory, session.thumbnailCache.directory, session.playback.directory]
+      ? [session.thumbnailCache.directory, session.playback.directory]
       : [];
     return clearCacheDirectories(this.cacheRoot, preserved);
   }

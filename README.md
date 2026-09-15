@@ -4,7 +4,7 @@ The repository currently contains the Phase 1 timing probe described in [PROJECT
 
 See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for the current checklist, verification record, and next work.
 
-The media code also includes a bounded display-proxy cache. It seeks to an indexed presentation timestamp, decodes a small frame window, and evicts older PNG proxies instead of extracting the full source file.
+The viewer uses a seekable compressed playback proxy for playback and frame navigation. It does not generate full-size PNG proxies while stepping or scrubbing. The sampled filmstrip uses a bounded cache of small thumbnails, and export decodes full-resolution PNGs from the source.
 
 ## Requirements
 
@@ -31,7 +31,7 @@ The default outputs are `<source filename>.timing.json` and `<source filename>.t
 npm start
 ```
 
-The current viewer opens a local video, shows the first indexed frame, and steps by exact source-frame position with the arrow keys, comma, period, Home, or End. Normal playback with synchronized audio is the next Phase 1 slice.
+The current viewer opens a local video and uses the same seekable proxy for synchronized playback and indexed frame navigation. Use the arrow keys, comma, period, Home, or End to move between frames.
 
 ## Test
 

@@ -4,7 +4,6 @@ import type { AnimationStudyApi } from "../app-contract.js";
 const api: AnimationStudyApi = {
   getMediaToolStatus: () => ipcRenderer.invoke("media:get-tool-status"),
   openVideo: () => ipcRenderer.invoke("media:open-video"),
-  getFrame: (timelinePosition) => ipcRenderer.invoke("media:get-frame", timelinePosition),
   getBackgroundAnalysisStatus: () => ipcRenderer.invoke("media:get-background-analysis-status"),
   getCelInformation: (timelinePosition) => ipcRenderer.invoke("media:get-cel-information", timelinePosition),
   getAdjacentCelPosition: (timelinePosition, direction) => ipcRenderer.invoke("media:get-adjacent-cel-position", timelinePosition, direction),

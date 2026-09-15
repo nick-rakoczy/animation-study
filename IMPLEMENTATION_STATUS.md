@@ -42,6 +42,7 @@ Phase 5 is complete. Remaining work is tracked in Phase 0, plus the user-owned C
 - [x] Map playback progress to exact indexed frame positions for constant-rate video.
 - [x] Map playback progress to exact indexed frame positions for variable-rate video.
 - [x] Add `Space` play and pause behavior.
+- [x] Seek the compressed playback proxy for frame navigation instead of generating display PNGs.
 - [x] Add automated audio and video synchronization coverage.
 - [x] Confirm that one-hour sources do not require a full-resolution frame sequence.
 

@@ -41,7 +41,6 @@ app.whenReady().then(() => {
     const sourcePath = result.filePaths[0];
     return result.canceled || !sourcePath ? null : service.openVideo(sourcePath);
   });
-  ipcMain.handle("media:get-frame", (_event, timelinePosition: number) => service.getFrame(timelinePosition));
   ipcMain.handle("media:get-background-analysis-status", () => service.getBackgroundAnalysisStatus());
   ipcMain.handle("media:get-cel-information", (_event, timelinePosition: number) => service.getCelInformation(timelinePosition));
   ipcMain.handle("media:get-adjacent-cel-position", (_event, timelinePosition: number, direction: "previous" | "next") => service.getAdjacentCelPosition(timelinePosition, direction));

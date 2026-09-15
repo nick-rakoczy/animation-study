@@ -10,15 +10,6 @@ export interface MediaToolStatus {
   readonly error: string | null;
 }
 
-export interface DisplayFrame {
-  readonly timelinePosition: number;
-  readonly displayFrameNumber: number;
-  readonly frameCount: number;
-  readonly presentationTimestamp: Rational;
-  readonly presentationDuration: Rational;
-  readonly imageDataUrl: string;
-}
-
 export interface PlaybackFrame {
   readonly timelinePosition: number;
   readonly displayFrameNumber: number;
@@ -42,7 +33,6 @@ export interface OpenVideoResult {
   readonly height: number;
   readonly averageFrameRate: Rational | null;
   readonly playbackFrames: readonly PlaybackFrame[];
-  readonly frame: DisplayFrame;
 }
 
 export type CelInformation =
@@ -85,7 +75,6 @@ export interface CacheCleanupResult {
 export interface AnimationStudyApi {
   getMediaToolStatus(): Promise<MediaToolStatus>;
   openVideo(): Promise<OpenVideoResult | null>;
-  getFrame(timelinePosition: number): Promise<DisplayFrame>;
   getBackgroundAnalysisStatus(): Promise<BackgroundAnalysisStatus>;
   getCelInformation(timelinePosition: number): Promise<CelInformation>;
   getAdjacentCelPosition(timelinePosition: number, direction: "previous" | "next"): Promise<CelNavigationResult>;

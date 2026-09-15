@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BackgroundAnalysisStatus, CelInformation, CorrectionInformation, DisplayFrame, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
+import type { BackgroundAnalysisStatus, CelInformation, CorrectionInformation, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
 import type { AnalysisJobStage } from "../../src/analysis-job.js";
 import type { ExposureCorrectionAction } from "../../src/exposure-correction.js";
 import { appKeyboardAction } from "../../src/keyboard-shortcuts.js";
-import { timelinePositionAtPlaybackTime } from "../../src/playback.js";
+import { playbackSeekTime, timelinePositionAtPlaybackTime } from "../../src/playback.js";
 import { createInclusiveTimelineRange, timelineRangeFractions, type InclusiveTimelineRange } from "../../src/timeline-range.js";
 import { defaultTimelineScaleIndex, nextTimelineScaleIndex, timelineSampleCounts } from "../../src/timeline-scale.js";
 import { timelinePositionFromOffset } from "../../src/timeline-scrub.js";
@@ -11,7 +11,6 @@ import { timelinePositionFromOffset } from "../../src/timeline-scrub.js";
 export function App() {
   const [tools, setTools] = useState<MediaToolStatus | null>(null);
   const [video, setVideo] = useState<OpenVideoResult | null>(null);
-  const [frame, setFrame] = useState<DisplayFrame | null>(null);
   const [timelinePosition, setTimelinePosition] = useState(0);
   const [celInformation, setCelInformation] = useState<CelInformation | null>(null);
   const [correctionInformation, setCorrectionInformation] = useState<CorrectionInformation | null>(null);
@@ -27,7 +26,6 @@ export function App() {
   const [timelineScaleIndex, setTimelineScaleIndex] = useState(defaultTimelineScaleIndex);
   const [timelineRange, setTimelineRange] = useState<InclusiveTimelineRange | null>(null);
   const [rangeSelectionMode, setRangeSelectionMode] = useState(false);
-  const [showingPlayback, setShowingPlayback] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,9 +33,7 @@ export function App() {
   const openButton = useRef<HTMLButtonElement>(null);
   const filmstrip = useRef<HTMLDivElement>(null);
   const focusTimelineWhenReady = useRef(false);
-  const displayedFramePosition = useRef(0);
-  const requestedFramePosition = useRef<number | null>(null);
-  const frameRequestRunning = useRef(false);
+  const requestedTimelinePosition = useRef(0);
   const timelineRangeAnchor = useRef<number | null>(null);
 
   useEffect(() => {
@@ -51,10 +47,8 @@ export function App() {
       const opened = await window.animationStudy.openVideo();
       if (opened) {
         setVideo(opened);
-        setFrame(opened.frame);
-        displayedFramePosition.current = opened.frame.timelinePosition;
-        requestedFramePosition.current = null;
-        setTimelinePosition(opened.frame.timelinePosition);
+        requestedTimelinePosition.current = 0;
+        setTimelinePosition(0);
         setCelInformation({ status: "pending" });
         setCorrectionInformation({ status: "pending" });
         setAnalysisStatus({ status: "running", progress: null });
@@ -65,7 +59,6 @@ export function App() {
         setExportStatus(null);
         setRangeSelectionMode(false);
         timelineRangeAnchor.current = null;
-        setShowingPlayback(false);
         setPlaying(false);
         focusTimelineWhenReady.current = true;
       }
@@ -149,43 +142,27 @@ export function App() {
 
   const showFrame = useCallback((position: number) => {
     if (!video) return;
-    videoElement.current?.pause();
     const clamped = Math.max(0, Math.min(video.playbackFrames.length - 1, position));
-    requestedFramePosition.current = clamped;
+    requestedTimelinePosition.current = clamped;
     setTimelinePosition(clamped);
-    if (frameRequestRunning.current) return;
-
-    frameRequestRunning.current = true;
-    setBusy(true);
-    setError(null);
+    const element = videoElement.current;
+    const playbackFrame = video.playbackFrames[clamped];
+    if (!element || !playbackFrame) return;
+    element.pause();
     void (async () => {
       try {
-        while (requestedFramePosition.current !== null) {
-          const requestedPosition = requestedFramePosition.current;
-          requestedFramePosition.current = null;
-          if (requestedPosition === displayedFramePosition.current) {
-            setShowingPlayback(false);
-            continue;
-          }
-          const requested = await window.animationStudy.getFrame(requestedPosition);
-          if (requestedFramePosition.current !== null) continue;
-          await preloadImage(requested.imageDataUrl);
-          if (requestedFramePosition.current === null) {
-            setFrame(requested);
-            displayedFramePosition.current = requested.timelinePosition;
-            setTimelinePosition(requested.timelinePosition);
-            setShowingPlayback(false);
-          }
-        }
+        await waitForMetadata(element);
+        if (requestedTimelinePosition.current !== clamped) return;
+        element.currentTime = playbackSeekTime(playbackFrame);
       } catch (caught) {
-        requestedFramePosition.current = null;
         setError(errorMessage(caught));
-      } finally {
-        frameRequestRunning.current = false;
-        setBusy(false);
       }
     })();
   }, [video]);
+
+  const stepFrame = useCallback((direction: -1 | 1) => {
+    showFrame(requestedTimelinePosition.current + direction);
+  }, [showFrame]);
 
   const timelinePositionForPointer = useCallback((clientX: number, element: HTMLDivElement) => {
     if (!video) return null;
@@ -233,7 +210,7 @@ export function App() {
 
   const togglePlayback = useCallback(async () => {
     const element = videoElement.current;
-    const playbackPosition = element?.ended ? 0 : timelinePosition;
+    const playbackPosition = element?.ended ? 0 : requestedTimelinePosition.current;
     const playbackFrame = video?.playbackFrames[playbackPosition];
     if (!element || !playbackFrame || busy) return;
     if (!element.paused) {
@@ -245,21 +222,22 @@ export function App() {
     try {
       await waitForMetadata(element);
       element.currentTime = rationalSeconds(playbackFrame.playbackTimestamp);
+      requestedTimelinePosition.current = playbackPosition;
       setTimelinePosition(playbackPosition);
-      setShowingPlayback(true);
       await element.play();
     } catch (caught) {
-      setShowingPlayback(false);
       setError(errorMessage(caught));
     }
-  }, [busy, timelinePosition, video]);
+  }, [busy, video]);
 
   useEffect(() => {
     const element = videoElement.current;
     if (!element || !video || !playing) return;
     let callbackId = 0;
     const updatePosition: VideoFrameRequestCallback = (_now, metadata) => {
-      setTimelinePosition(timelinePositionAtPlaybackTime(video.playbackFrames, metadata.mediaTime));
+      const position = timelinePositionAtPlaybackTime(video.playbackFrames, metadata.mediaTime);
+      requestedTimelinePosition.current = position;
+      setTimelinePosition(position);
       callbackId = element.requestVideoFrameCallback(updatePosition);
     };
     callbackId = element.requestVideoFrameCallback(updatePosition);
@@ -380,8 +358,8 @@ export function App() {
         void moveCorrectionHistory(action === "undo-correction" ? "undo" : "redo");
       } else if (action === "previous-cel" || action === "next-cel") {
         void navigateCel(action === "previous-cel" ? "previous" : "next");
-      } else if (action === "previous-frame") void showFrame(timelinePosition - 1);
-      else if (action === "next-frame") void showFrame(timelinePosition + 1);
+      } else if (action === "previous-frame") stepFrame(-1);
+      else if (action === "next-frame") stepFrame(1);
       else if (action === "first-frame") void showFrame(0);
       else if (action === "last-frame") void showFrame(video.playbackFrames.length - 1);
       else if (action === "increase-timeline-scale") scaleTimeline(1);
@@ -389,7 +367,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [moveCorrectionHistory, navigateCel, scaleTimeline, showFrame, timelinePosition, togglePlayback, video]);
+  }, [moveCorrectionHistory, navigateCel, scaleTimeline, showFrame, stepFrame, togglePlayback, video]);
 
   const toolDescription = tools?.available
     ? compactVersion(tools.ffmpegVersion)
@@ -452,7 +430,7 @@ export function App() {
             <>
               <video
                 ref={videoElement}
-                className={showingPlayback ? "source-video" : "source-video hidden"}
+                className="source-video"
                 src={video.playbackUrl}
                 preload="auto"
                 playsInline
@@ -460,11 +438,11 @@ export function App() {
                 onPause={() => setPlaying(false)}
                 onEnded={() => {
                   setPlaying(false);
+                  requestedTimelinePosition.current = video.playbackFrames.length - 1;
                   setTimelinePosition(video.playbackFrames.length - 1);
                 }}
                 onError={() => setError("The source could not be played by the embedded media decoder")}
               />
-              {!showingPlayback && frame ? <img src={frame.imageDataUrl} alt={`Source frame ${frame.displayFrameNumber}`} /> : null}
             </>
           ) : (
             <div className="empty-state">
@@ -673,10 +651,10 @@ export function App() {
 
       <footer className="transport">
         <button aria-label="First frame" aria-keyshortcuts="Home" disabled={!video || busy || timelinePosition === 0} onClick={() => void showFrame(0)}>│◀</button>
-        <button aria-label="Previous frame" aria-keyshortcuts="ArrowLeft ," disabled={!video || busy || timelinePosition === 0} onClick={() => void showFrame(timelinePosition - 1)}>◀</button>
+        <button aria-label="Previous frame" aria-keyshortcuts="ArrowLeft ," disabled={!video || busy || timelinePosition === 0} onClick={() => stepFrame(-1)}>◀</button>
         <button className="play-button" aria-label={playing ? "Pause" : "Play"} aria-keyshortcuts="Space" disabled={!video || busy} onClick={() => void togglePlayback()}>{playing ? "❚❚" : "▶"}</button>
         <output className="frame-readout" aria-live={playing ? "off" : "polite"} aria-atomic="true">{selectedTiming ? selectedTiming.displayFrameNumber.toString().padStart(6, "0") : "------"}</output>
-        <button aria-label="Next frame" aria-keyshortcuts="ArrowRight ." disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => void showFrame(timelinePosition + 1)}>▶</button>
+        <button aria-label="Next frame" aria-keyshortcuts="ArrowRight ." disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => stepFrame(1)}>▶</button>
         <button aria-label="Last frame" aria-keyshortcuts="End" disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => video && void showFrame(video.playbackFrames.length - 1)}>▶│</button>
       </footer>
 
@@ -722,15 +700,6 @@ function waitForMetadata(element: HTMLVideoElement): Promise<void> {
   return new Promise((resolve, reject) => {
     element.addEventListener("loadedmetadata", () => resolve(), { once: true });
     element.addEventListener("error", () => reject(new Error("The source media metadata could not be loaded")), { once: true });
-  });
-}
-
-function preloadImage(source: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.addEventListener("load", () => resolve(), { once: true });
-    image.addEventListener("error", () => reject(new Error("The requested frame image could not be loaded")), { once: true });
-    image.src = source;
   });
 }
 
