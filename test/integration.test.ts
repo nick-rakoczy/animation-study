@@ -13,7 +13,7 @@ import { createContactSheet } from "../src/contact-sheet.js";
 import { buildExposureSpans } from "../src/exposure-span.js";
 import { exportExposureSelection } from "../src/exposure-export.js";
 import { FrameProxyCache } from "../src/frame-cache.js";
-import { PlaybackProxy } from "../src/playback-proxy.js";
+import { PlaybackProxy, playbackKeyframeInterval } from "../src/playback-proxy.js";
 import { probeVideo } from "../src/probe.js";
 import { ApplicationService } from "../src/main/application-service.js";
 import { sourceContentFingerprint } from "../src/source-fingerprint.js";
@@ -86,6 +86,36 @@ test("probes a real 24000/1001 video and creates a contact sheet", async (contex
   assert.ok(frameCache.cachedPositions().length <= 3);
   await frameCache.clear();
 
+  const readAheadCache = new FrameProxyCache({
+    sourcePath: videoPath,
+    sourceFingerprint: await sourceContentFingerprint(videoPath),
+    timing,
+    cacheRoot: directory,
+    widthLimit: 160,
+    prefetchRadius: 1,
+    maxEntries: 6,
+  });
+  await readAheadCache.getFrame(0);
+  await readAheadCache.getFrame(1);
+  await waitFor(() => readAheadCache.cachedPositions().includes(4));
+  assert.ok(readAheadCache.cachedPositions().includes(2));
+  await readAheadCache.clear();
+
+  const prioritizedCache = new FrameProxyCache({
+    sourcePath: videoPath,
+    sourceFingerprint: await sourceContentFingerprint(videoPath),
+    timing,
+    cacheRoot: directory,
+    widthLimit: 160,
+    prefetchRadius: 1,
+    maxEntries: 6,
+  });
+  await prioritizedCache.getFrame(0);
+  await prioritizedCache.getFrame(1);
+  const distantFrame = await prioritizedCache.getFrame(5);
+  assert.equal(distantFrame.timelinePosition, 5);
+  await prioritizedCache.clear();
+
   const playback = new PlaybackProxy({
     sourcePath: videoPath,
     sourceFingerprint: await sourceContentFingerprint(videoPath),
@@ -109,6 +139,66 @@ test("probes a real 24000/1001 video and creates a contact sheet", async (contex
     { codec_name: "opus", codec_type: "audio" },
   ]);
   await playback.clear();
+});
+
+test("bounds the playback proxy keyframe interval for responsive seeking", async (context) => {
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+    await execFileAsync("ffprobe", ["-version"]);
+  } catch {
+    context.skip("ffmpeg and ffprobe are required for this integration test");
+    return;
+  }
+
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-keyframe-test-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const sourcePath = join(directory, "keyframe fixture.mp4");
+  await execFileAsync("ffmpeg", [
+    "-v", "error",
+    "-f", "lavfi",
+    "-i", "testsrc2=size=96x54:rate=24:duration=2",
+    "-c:v", "libx264",
+    "-g", "48",
+    "-pix_fmt", "yuv420p",
+    "-y",
+    sourcePath,
+  ]);
+
+  const timing = await probeVideo(sourcePath);
+  const playback = new PlaybackProxy({
+    sourcePath,
+    sourceFingerprint: await sourceContentFingerprint(sourcePath),
+    timing,
+    cacheRoot: directory,
+    widthLimit: 96,
+  });
+  const playbackPath = await playback.create();
+  const probe = await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-select_streams", "v:0",
+    "-show_entries", "frame=key_frame",
+    "-of", "json",
+    playbackPath,
+  ]);
+  const frames = (JSON.parse(probe.stdout) as {
+    readonly frames: readonly { readonly key_frame: number }[];
+  }).frames;
+  const keyframePositions = frames
+    .map((frame, position) => frame.key_frame === 1 ? position : null)
+    .filter((position): position is number => position !== null);
+
+  assert.equal(frames.length, timing.frameCount);
+  assert.equal(keyframePositions[0], 0);
+  for (let index = 1; index < keyframePositions.length; index += 1) {
+    assert.ok(
+      keyframePositions[index]! - keyframePositions[index - 1]! <= playbackKeyframeInterval,
+      `keyframes were more than ${playbackKeyframeInterval} frames apart`,
+    );
+  }
+  assert.ok(
+    frames.length - keyframePositions.at(-1)! <= playbackKeyframeInterval,
+    `the final keyframe was more than ${playbackKeyframeInterval} frames from the end`,
+  );
 });
 
 test("reports corrupt media and missing decoder diagnostics", async (context) => {
@@ -726,6 +816,14 @@ test("exports full-resolution frames in decoded display orientation", async (con
 interface SyncEvents {
   readonly videoSeconds: number;
   readonly audioSeconds: number;
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error("Condition did not become true within five seconds");
 }
 
 async function waitForCelInformation(

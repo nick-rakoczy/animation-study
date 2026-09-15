@@ -4,6 +4,9 @@ import { basename, join, resolve } from "node:path";
 import { runProcess } from "./process.js";
 import type { NormalizedTiming } from "./timing.js";
 
+export const playbackKeyframeInterval = 12;
+const playbackProxyVersion = `vp9-seekable-g${playbackKeyframeInterval}-v1`;
+
 export interface PlaybackProxyOptions {
   readonly sourcePath: string;
   readonly sourceFingerprint: string;
@@ -38,6 +41,8 @@ export class PlaybackProxy {
       .update(options.sourceFingerprint)
       .update("\0")
       .update(this.#widthLimit.toString())
+      .update("\0")
+      .update(playbackProxyVersion)
       .digest("hex")
       .slice(0, 20);
     this.#directory = join(resolve(options.cacheRoot), `${basename(this.#sourcePath)}-${sourceKey}-playback`);
@@ -64,6 +69,7 @@ export class PlaybackProxy {
         "-vf", `scale=${scale}`,
         "-fps_mode", "passthrough",
         "-c:v", "libvpx-vp9",
+        "-g", playbackKeyframeInterval.toString(),
         "-deadline", "realtime",
         "-cpu-used", "8",
         "-row-mt", "1",

@@ -166,6 +166,7 @@ Phase 5 is complete. Remaining work is tracked in Phase 0, plus the user-owned C
 | 2026-09-15 | Packaged Electron startup | The production x86-64 package remained running under a virtual X display until the 10-second smoke-test timeout |
 | 2026-09-15 | Final Phase 5 verification | `npm run typecheck` passed; all 15 test files passed; the production renderer build and `git diff --check` passed |
 | 2026-09-15 | `git diff --check` | Passed |
+| 2026-09-15 | Seek-friendly playback proxy | Limited VP9 keyframe spacing to 12 frames, versioned the playback cache identity, and verified the encoded keyframe interval with FFprobe |
 
 ## Known limitations in the current build
 

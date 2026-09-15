@@ -113,6 +113,15 @@ test("renderer provides focus movement and accessible keyboard semantics", async
   assert.match(styles, /:focus-visible/);
 });
 
+test("frame stepping keeps paused playback visible until the still frame is ready", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  const showFrame = source.slice(source.indexOf("const showFrame"), source.indexOf("const timelinePositionForPointer"));
+  assert.doesNotMatch(showFrame, /pause\(\);\s*setShowingPlayback\(false\)/);
+  assert.match(showFrame, /getFrame\(requestedPosition\)[\s\S]*requestedFramePosition\.current !== null\) continue;[\s\S]*preloadImage/);
+  assert.match(showFrame, /await preloadImage\(requested\.imageDataUrl\)/);
+  assert.match(showFrame, /setFrame\(requested\)[\s\S]*setShowingPlayback\(false\)/);
+});
+
 test("renderer reports background analysis without blocking controls", async () => {
   const source = await readFile("renderer/src/App.tsx", "utf8");
   assert.match(source, /getBackgroundAnalysisStatus/);

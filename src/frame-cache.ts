@@ -36,6 +36,8 @@ export class FrameProxyCache {
   readonly #maxEntries: number;
   readonly #recentlyUsed = new Map<number, string>();
   #activeDecode: Promise<void> | null = null;
+  #readAheadAbortController: AbortController | null = null;
+  #lastRequestedPosition: number | null = null;
 
   get directory(): string {
     return this.#directory;
@@ -72,19 +74,25 @@ export class FrameProxyCache {
 
   async getFrame(timelinePosition: number, signal?: AbortSignal): Promise<FrameProxy> {
     this.#assertPosition(timelinePosition);
+    const previousPosition = this.#lastRequestedPosition;
+    this.#lastRequestedPosition = timelinePosition;
     await mkdir(this.#directory, { recursive: true });
 
     let path = this.#pathFor(timelinePosition);
     if (!(await fileExists(path))) {
-      if (this.#activeDecode) await this.#activeDecode;
+      if (this.#activeDecode) {
+        this.#readAheadAbortController?.abort();
+        await this.#activeDecode;
+      }
       if (!(await fileExists(path))) {
         const start = Math.max(0, timelinePosition - this.#prefetchRadius);
         const end = Math.min(this.#timing.frameCount - 1, timelinePosition + this.#prefetchRadius);
-        this.#activeDecode = this.#decodeWindow(start, end, signal);
+        const task = this.#decodeWindow(start, end, signal);
+        this.#activeDecode = task;
         try {
-          await this.#activeDecode;
+          await task;
         } finally {
-          this.#activeDecode = null;
+          if (this.#activeDecode === task) this.#activeDecode = null;
         }
       }
     }
@@ -95,6 +103,11 @@ export class FrameProxyCache {
     }
     this.#touch(timelinePosition, path);
     await this.#evictOldEntries(timelinePosition);
+    const prefetchWindowSize = this.#prefetchRadius * 2 + 1;
+    if (previousPosition !== null && this.#prefetchRadius > 0 && this.#maxEntries >= prefetchWindowSize * 2) {
+      const direction = Math.sign(timelinePosition - previousPosition);
+      if (direction !== 0) this.#startDirectionalPrefetch(timelinePosition, direction as -1 | 1);
+    }
     return { timelinePosition, path, widthLimit: this.#widthLimit };
   }
 
@@ -103,8 +116,44 @@ export class FrameProxyCache {
   }
 
   async clear(): Promise<void> {
+    this.#readAheadAbortController?.abort();
+    await this.#activeDecode;
     await rm(this.#directory, { force: true, recursive: true });
     this.#recentlyUsed.clear();
+    this.#lastRequestedPosition = null;
+  }
+
+  #startDirectionalPrefetch(timelinePosition: number, direction: -1 | 1): void {
+    if (this.#activeDecode) return;
+    const windowSize = this.#prefetchRadius * 2 + 1;
+    const abortController = new AbortController();
+    const task = (async () => {
+      let firstMissing = timelinePosition + direction;
+      while (firstMissing >= 0 && firstMissing < this.#timing.frameCount) {
+        if (!(await fileExists(this.#pathFor(firstMissing)))) break;
+        firstMissing += direction;
+      }
+      if (firstMissing < 0 || firstMissing >= this.#timing.frameCount) return;
+
+      const start = direction > 0
+        ? firstMissing
+        : Math.max(0, firstMissing - windowSize + 1);
+      const end = direction > 0
+        ? Math.min(this.#timing.frameCount - 1, firstMissing + windowSize - 1)
+        : firstMissing;
+      await this.#decodeWindow(start, end, abortController.signal);
+      await this.#evictOldEntries(timelinePosition);
+    })().catch(() => {
+      // Read-ahead is optional. A foreground request retries the frame and reports any decode error.
+    });
+    this.#activeDecode = task;
+    this.#readAheadAbortController = abortController;
+    void task.finally(() => {
+      if (this.#activeDecode === task) {
+        this.#activeDecode = null;
+        this.#readAheadAbortController = null;
+      }
+    });
   }
 
   #assertPosition(timelinePosition: number): void {

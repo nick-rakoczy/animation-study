@@ -150,7 +150,6 @@ export function App() {
   const showFrame = useCallback((position: number) => {
     if (!video) return;
     videoElement.current?.pause();
-    setShowingPlayback(false);
     const clamped = Math.max(0, Math.min(video.playbackFrames.length - 1, position));
     requestedFramePosition.current = clamped;
     setTimelinePosition(clamped);
@@ -164,12 +163,18 @@ export function App() {
         while (requestedFramePosition.current !== null) {
           const requestedPosition = requestedFramePosition.current;
           requestedFramePosition.current = null;
-          if (requestedPosition === displayedFramePosition.current) continue;
+          if (requestedPosition === displayedFramePosition.current) {
+            setShowingPlayback(false);
+            continue;
+          }
           const requested = await window.animationStudy.getFrame(requestedPosition);
+          if (requestedFramePosition.current !== null) continue;
+          await preloadImage(requested.imageDataUrl);
           if (requestedFramePosition.current === null) {
             setFrame(requested);
             displayedFramePosition.current = requested.timelinePosition;
             setTimelinePosition(requested.timelinePosition);
+            setShowingPlayback(false);
           }
         }
       } catch (caught) {
@@ -717,6 +722,15 @@ function waitForMetadata(element: HTMLVideoElement): Promise<void> {
   return new Promise((resolve, reject) => {
     element.addEventListener("loadedmetadata", () => resolve(), { once: true });
     element.addEventListener("error", () => reject(new Error("The source media metadata could not be loaded")), { once: true });
+  });
+}
+
+function preloadImage(source: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener("load", () => resolve(), { once: true });
+    image.addEventListener("error", () => reject(new Error("The requested frame image could not be loaded")), { once: true });
+    image.src = source;
   });
 }
 
