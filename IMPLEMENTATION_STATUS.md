@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Partial and completed analysis persistence.
+Loading completed analysis without rerunning work.
 
 ## Phase 0: decisions and technical proofs
 
@@ -54,7 +54,7 @@ Partial and completed analysis persistence.
 - [x] Add the sensitivity setting and reset action.
 - [x] Add selected-range reanalysis and a preview cel count.
 - [x] Add job progress and cancellation.
-- [ ] Save partial and completed analysis results to the sidecar project.
+- [x] Save partial and completed analysis results to the sidecar project.
 - [ ] Load saved analysis without rerunning completed work.
 - [ ] Tune the detector against the fixture set.
 
@@ -93,7 +93,7 @@ Partial and completed analysis persistence.
 
 ## Phase 5: persistence and release
 
-- [ ] Create the SQLite `<source filename>.animstudy` sidecar.
+- [x] Create the SQLite `<source filename>.animstudy` sidecar.
 - [ ] Store source metadata, timing, analysis settings, exposures, scores, and corrections.
 - [ ] Add source-content hashing for cache invalidation.
 - [ ] Add crash-safe sidecar writes.
@@ -116,7 +116,7 @@ Partial and completed analysis persistence.
 
 | Date | Check | Result |
 | --- | --- | --- |
-| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, range analysis, job progress and cancellation, and renderer asset-path tests |
+| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, analysis persistence, job cancellation, and renderer asset-path tests |
 | 2026-09-14 | `npm run typecheck` | Passed core and renderer TypeScript checks |
 | 2026-09-14 | `npm run build` | Passed TypeScript and production renderer builds |
 | 2026-09-14 | Constant-rate fixture at `24000/1001` | Returned 24 indexed frames with exact rational timing |
@@ -135,12 +135,13 @@ Partial and completed analysis persistence.
 | 2026-09-14 | Sensitivity tests | Mapped the 0 through 100 setting to both thresholds, changed the exposure count without rescoring frames, and reset to the default value of 50 |
 | 2026-09-14 | Selected-range analysis tests | Reclassified only internal boundaries at the requested sensitivity, previewed the resulting cel count, handled one-frame selections, and rejected invalid ranges |
 | 2026-09-14 | Analysis job tests | Reported frame progress for proxy generation and both scoring passes, reported cache hits, cancelled scoring after one frame, and left no partial score file |
+| 2026-09-14 | Analysis sidecar tests | Created a SQLite `.animstudy` file, saved a partial score prefix, replaced it with a validated completed analysis in one transaction, and preserved the prior snapshot after invalid input |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
 - The frame-by-frame filmstrip timeline does not exist yet.
-- Analysis progress is not shown in the interface yet. Cel information, corrections, sidecar persistence, and export do not exist yet.
+- Analysis progress is not shown in the interface yet. Loading sidecar analysis, cel information, corrections, and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.
