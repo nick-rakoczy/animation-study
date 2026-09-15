@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Synchronized source playback with audio. Normal playback must follow source presentation timing. Frame stepping must remain silent.
+Long-source playback-proxy validation.
 
 ## Phase 0: decisions and technical proofs
 
@@ -16,7 +16,7 @@ Synchronized source playback with audio. Normal playback must follow source pres
 - [x] Confirm that the Electron renderer starts on Linux.
 - [ ] Collect the full fixture set for clean holds, compression noise, camera motion, dissolves, variable frame rate, and returning drawings.
 - [ ] Complete the Clip Studio Paint compatibility test on Windows.
-- [ ] Test the playback design on Linux.
+- [x] Test the playback design on Linux.
 - [ ] Test the playback design on Windows.
 - [ ] Set and document the minimum supported FFmpeg version.
 
@@ -36,13 +36,13 @@ Synchronized source playback with audio. Normal playback must follow source pres
 - [x] Add exact previous, next, first, and last frame controls.
 - [x] Add `Left`, `Right`, `,`, `.`, `Home`, and `End` frame navigation.
 - [ ] Measure cached forward and backward frame steps against the 1/30-second target.
-- [ ] Add normal source-timed video playback.
-- [ ] Add synchronized source audio during playback.
-- [ ] Keep frame stepping silent after audio playback exists.
-- [ ] Map playback progress to exact indexed frame positions for constant-rate video.
-- [ ] Map playback progress to exact indexed frame positions for variable-rate video.
-- [ ] Add `Space` play and pause behavior.
-- [ ] Add automated audio and video synchronization coverage.
+- [x] Add normal source-timed video playback.
+- [x] Add synchronized source audio during playback.
+- [x] Keep frame stepping silent after audio playback exists.
+- [x] Map playback progress to exact indexed frame positions for constant-rate video.
+- [x] Map playback progress to exact indexed frame positions for variable-rate video.
+- [x] Add `Space` play and pause behavior.
+- [x] Add automated audio and video synchronization coverage.
 - [ ] Confirm that one-hour sources do not require a full-resolution frame sequence.
 
 ## Phase 2: exposure analysis
@@ -116,18 +116,21 @@ Synchronized source playback with audio. Normal playback must follow source pres
 
 | Date | Check | Result |
 | --- | --- | --- |
-| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, and renderer asset-path tests |
+| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback-proxy synchronization, and renderer asset-path tests |
+| 2026-09-14 | `npm run typecheck` | Passed core and renderer TypeScript checks |
 | 2026-09-14 | `npm run build` | Passed TypeScript and production renderer builds |
 | 2026-09-14 | Constant-rate fixture at `24000/1001` | Returned 24 indexed frames with exact rational timing |
 | 2026-09-14 | Variable-timestamp fixture | Preserved distinct presentation timestamps and frame durations |
 | 2026-09-14 | Exact proxy comparison | Cached frame pixels matched the independently decoded PNG |
 | 2026-09-14 | Electron Linux startup under Xvfb | Window remained running without application startup errors |
 | 2026-09-14 | Electron rendered-DOM inspection | React root contained the viewer, information panel, and transport controls |
+| 2026-09-14 | Electron Linux playback smoke test | Loaded a VP9/Opus proxy with both streams starting at zero; video reached `HAVE_ENOUGH_DATA` and playback advanced |
+| 2026-09-14 | Automated audio/video synchronization fixture | A decoded flash and tone retained their relative timing through proxy generation within 30 ms |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
-- The application displays and steps through still proxies. It does not play video or audio yet.
+- Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
 - The frame-by-frame filmstrip timeline does not exist yet.
 - Exposure detection, cel information, corrections, sidecar persistence, and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.

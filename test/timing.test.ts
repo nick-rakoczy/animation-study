@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chooseSamplePositions } from "../src/contact-sheet.js";
 import { rationalToDecimal } from "../src/rational.js";
+import { createPlaybackFrames, timelinePositionAtPlaybackTime } from "../src/playback.js";
 import { normalizeTiming, type RawProbe } from "../src/timing.js";
 
 test("maps constant-rate frames to zero-based positions and exact rational timing", () => {
@@ -65,6 +66,39 @@ test("samples both ends without duplicate frame positions", () => {
 test("formats rational seek positions without floating-point conversion", () => {
   assert.equal(rationalToDecimal({ numerator: "1001", denominator: "24000" }, 12), "0.041708333333");
   assert.equal(rationalToDecimal({ numerator: "-1", denominator: "2" }, 3), "-0.500");
+});
+
+test("maps constant-rate playback progress to indexed frame positions", () => {
+  const timing = normalizeTiming(probeWithFrames([
+    { best_effort_timestamp: 100, pkt_duration: 40 },
+    { best_effort_timestamp: 140, pkt_duration: 40 },
+    { best_effort_timestamp: 180, pkt_duration: 40 },
+  ], "1/1000", "25/1"));
+  const frames = createPlaybackFrames(timing);
+
+  assert.deepEqual(frames.map((frame) => frame.playbackTimestamp), [
+    { numerator: "0", denominator: "1" },
+    { numerator: "1", denominator: "25" },
+    { numerator: "2", denominator: "25" },
+  ]);
+  assert.equal(timelinePositionAtPlaybackTime(frames, 0), 0);
+  assert.equal(timelinePositionAtPlaybackTime(frames, 0.039), 0);
+  assert.equal(timelinePositionAtPlaybackTime(frames, 0.04), 1);
+  assert.equal(timelinePositionAtPlaybackTime(frames, 2), 2);
+});
+
+test("maps variable-rate playback progress using each frame timestamp", () => {
+  const timing = normalizeTiming(probeWithFrames([
+    { best_effort_timestamp: 0, pkt_duration: 20 },
+    { best_effort_timestamp: 20, pkt_duration: 80 },
+    { best_effort_timestamp: 100, pkt_duration: 30 },
+  ], "1/1000", "0/0"));
+  const frames = createPlaybackFrames(timing);
+
+  assert.equal(timelinePositionAtPlaybackTime(frames, 0.019), 0);
+  assert.equal(timelinePositionAtPlaybackTime(frames, 0.02), 1);
+  assert.equal(timelinePositionAtPlaybackTime(frames, 0.099), 1);
+  assert.equal(timelinePositionAtPlaybackTime(frames, 0.1), 2);
 });
 
 function probeWithFrames(

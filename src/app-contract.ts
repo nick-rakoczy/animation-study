@@ -16,13 +16,23 @@ export interface DisplayFrame {
   readonly imageDataUrl: string;
 }
 
+export interface PlaybackFrame {
+  readonly timelinePosition: number;
+  readonly displayFrameNumber: number;
+  readonly presentationTimestamp: Rational;
+  readonly presentationDuration: Rational;
+  readonly playbackTimestamp: Rational;
+}
+
 export interface OpenVideoResult {
   readonly sourcePath: string;
   readonly sourceName: string;
+  readonly playbackUrl: string;
   readonly codec: string | null;
   readonly width: number;
   readonly height: number;
   readonly averageFrameRate: Rational | null;
+  readonly playbackFrames: readonly PlaybackFrame[];
   readonly frame: DisplayFrame;
 }
 
