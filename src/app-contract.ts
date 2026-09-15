@@ -1,6 +1,7 @@
 import type { Rational } from "./rational.js";
 import type { ExposureCorrectionAction, ExposureCorrectionState } from "./exposure-correction.js";
 import type { AnalysisJobProgress } from "./analysis-job.js";
+import type { InclusiveTimelineRange } from "./timeline-range.js";
 
 export interface MediaToolStatus {
   readonly available: boolean;
@@ -71,6 +72,11 @@ export type BackgroundAnalysisStatus =
   | { readonly status: "ready"; readonly loadedFromSidecar: boolean }
   | { readonly status: "failed"; readonly error: string };
 
+export interface ExportSelectionResult {
+  readonly outputDirectory: string;
+  readonly exportedFrameCount: number;
+}
+
 export interface AnimationStudyApi {
   getMediaToolStatus(): Promise<MediaToolStatus>;
   openVideo(): Promise<OpenVideoResult | null>;
@@ -83,4 +89,6 @@ export interface AnimationStudyApi {
   undoExposureCorrection(): Promise<void>;
   redoExposureCorrection(): Promise<void>;
   getTimelineThumbnails(sampleCount: number): Promise<readonly TimelineThumbnail[]>;
+  exportSelection(range: InclusiveTimelineRange): Promise<ExportSelectionResult | null>;
+  cancelExport(): Promise<void>;
 }

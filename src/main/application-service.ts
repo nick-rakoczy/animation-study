@@ -9,6 +9,7 @@ import { AnalysisSensitivity, defaultAnalysisSensitivity } from "../analysis-sen
 import { adjacentCelStartPosition, celInformationForFrame } from "../cel-information.js";
 import { chooseSamplePositions } from "../contact-sheet.js";
 import { applyExposureCorrection, correctionStateForFrame, type ExposureCorrectionAction } from "../exposure-correction.js";
+import { exportExposureSelection, type ExposureExportResult } from "../exposure-export.js";
 import type { ExposureTimeline } from "../exposure-span.js";
 import { FrameProxyCache } from "../frame-cache.js";
 import { createPlaybackFrames } from "../playback.js";
@@ -16,6 +17,7 @@ import { PlaybackProxy } from "../playback-proxy.js";
 import { probeVideo } from "../probe.js";
 import type { BackgroundAnalysisStatus, CelInformation, CelNavigationResult, CorrectionInformation, DisplayFrame, OpenVideoResult, TimelineThumbnail } from "../app-contract.js";
 import type { NormalizedTiming } from "../timing.js";
+import type { InclusiveTimelineRange } from "../timeline-range.js";
 
 interface VideoSession {
   readonly sourcePath: string;
@@ -35,10 +37,12 @@ interface VideoSession {
 
 export class ApplicationService {
   #session: VideoSession | null = null;
+  #exportAbortController: AbortController | null = null;
 
   constructor(readonly cacheRoot: string) {}
 
   async openVideo(sourcePath: string): Promise<OpenVideoResult> {
+    this.#exportAbortController?.abort();
     this.#session?.analysisAbortController.abort();
     this.#session?.thumbnailAbortController.abort();
     await this.#session?.thumbnailCache.clear();
@@ -212,6 +216,34 @@ export class ApplicationService {
       });
     }
     return thumbnails;
+  }
+
+  async exportSelection(
+    range: InclusiveTimelineRange,
+    outputDirectory: string,
+  ): Promise<ExposureExportResult> {
+    const session = this.#session;
+    if (!session) throw new Error("Open a video before exporting exposures");
+    if (session.analysisError) throw new Error(session.analysisError);
+    if (!session.analysisTimeline) throw new Error("Exposure analysis is not ready");
+    if (this.#exportAbortController) throw new Error("An export is already running");
+    const abortController = new AbortController();
+    this.#exportAbortController = abortController;
+    try {
+      return await exportExposureSelection({
+        sourcePath: session.sourcePath,
+        outputDirectory,
+        timeline: session.analysisTimeline,
+        range,
+        signal: abortController.signal,
+      });
+    } finally {
+      if (this.#exportAbortController === abortController) this.#exportAbortController = null;
+    }
+  }
+
+  cancelExport(): void {
+    this.#exportAbortController?.abort();
   }
 
   async #analyze(session: VideoSession): Promise<void> {

@@ -1,12 +1,12 @@
 # Implementation status
 
-Last updated: 2026-09-14
+Last updated: 2026-09-15
 
 This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md). An item is checked only when the code exists and has relevant verification. Partially implemented plan items are split into smaller tasks.
 
 ## Current focus
 
-Export one opaque PNG for each exposure present in an inclusive selection.
+Run the documented Clip Studio Paint EX 5.1.4 compatibility test on Windows.
 
 ## Phase 0: decisions and technical proofs
 
@@ -81,14 +81,14 @@ Export one opaque PNG for each exposure present in an inclusive selection.
 
 ## Phase 4: export
 
-- [ ] Export one opaque PNG for each exposure present in an inclusive selection.
-- [ ] Preserve source resolution and decoded display orientation.
-- [ ] Restart export-local cel numbering at `0001`.
-- [ ] Prefix names with the selected starting source-frame number.
-- [ ] Create and reuse the source-specific export folder when names cannot collide.
-- [ ] Create a numbered sibling folder when intended names already exist.
-- [ ] Never overwrite an existing export file.
-- [ ] Leave no output that looks complete after cancellation or failure.
+- [x] Export one opaque PNG for each exposure present in an inclusive selection.
+- [x] Preserve source resolution and decoded display orientation.
+- [x] Restart export-local cel numbering at `0001`.
+- [x] Prefix names with the selected starting source-frame number.
+- [x] Create and reuse the source-specific export folder when names cannot collide.
+- [x] Create a numbered sibling folder when intended names already exist.
+- [x] Never overwrite an existing export file.
+- [x] Leave no output that looks complete after cancellation or failure.
 - [ ] Validate exported fixtures in the target Clip Studio Paint version.
 
 ## Phase 5: persistence and release
@@ -150,12 +150,17 @@ Export one opaque PNG for each exposure present in an inclusive selection.
 | 2026-09-14 | Correction history tests | Undid and redid complete exposure timelines across representative, split, and merge edits; cleared redo after a new correction; and added buttons plus standard keyboard shortcuts |
 | 2026-09-14 | Accessibility and keyboard tests | Moved focus to the timeline after opening without overriding later user focus, focused the timeline on pointer use, exposed slider values and shortcuts, preserved native control keys, and tested every application shortcut through one mapping |
 | 2026-09-14 | Responsive background analysis tests | Exposed live analysis stages and progress through typed IPC, kept analysis separate from interaction busy state, and retrieved an exact frame while analysis was pending or completing |
-| 2026-09-14 | `git diff --check` | Passed |
+| 2026-09-15 | Inclusive exposure export tests | Exported exactly one opaque RGB PNG for each exposure crossing a selected range, used corrected representative positions, and exposed export through the directory picker and typed preload API |
+| 2026-09-15 | Export resolution and orientation test | Exported a 96 by 54 source carrying 90-degree display rotation as an opaque 54 by 96 PNG without resizing |
+| 2026-09-15 | Export naming and folder tests | Restarted cel numbering at `0001`, used the selected starting frame prefix, reused a source folder for non-colliding names, and created `_2` for a repeated export |
+| 2026-09-15 | Export safety tests | Used exclusive file creation, preserved the first export during a collision, exposed cancellation through typed IPC, and removed hidden staging files after cancellation or decoder failure |
+| 2026-09-15 | Clip Studio documentation review | Confirmed 5.1.4 as the current Windows release and recorded the official multi-file cel import, preference behavior, and manual assignment workflow in `docs/CLIP_STUDIO_COMPATIBILITY.md`; execution in Clip Studio Paint remains pending |
+| 2026-09-15 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
-- Timeline ranges and exposure corrections are session-only until export and project correction persistence are implemented.
-- Export does not exist yet.
+- Timeline ranges and exposure corrections are session-only until project correction persistence is implemented.
+- Clip Studio Paint EX 5.1.4 is not installed in this Linux workspace. The Windows compatibility procedure and expected fixture are documented, but the manual import test and `.clip` acceptance fixture still require the target application on Windows.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

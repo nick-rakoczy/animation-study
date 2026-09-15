@@ -120,3 +120,12 @@ test("renderer reports background analysis without blocking controls", async () 
   assert.match(source, /<progress aria-label="Background exposure analysis"/);
   assert.doesNotMatch(source, /setBusy\(analysisStatus/);
 });
+
+test("renderer exports the inclusive timeline selection", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  assert.match(source, /window\.animationStudy\.exportSelection\(timelineRange\)/);
+  assert.match(source, />\{exportBusy \? "Exporting\.\.\." : "Export"\}<\/button>/);
+  assert.match(source, /!timelineRange \|\| analysisStatus\?\.status !== "ready" \|\| exportBusy/);
+  assert.match(source, /aria-live="polite">\{exportStatus\}/);
+  assert.match(source, /window\.animationStudy\.cancelExport\(\)/);
+});

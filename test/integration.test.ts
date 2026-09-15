@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 import { AnalysisProxyCache } from "../src/analysis-proxy.js";
@@ -11,6 +11,7 @@ import { AnalysisCancelledError, type AnalysisJobProgress } from "../src/analysi
 import { classifyBoundaries } from "../src/boundary-classifier.js";
 import { createContactSheet } from "../src/contact-sheet.js";
 import { buildExposureSpans } from "../src/exposure-span.js";
+import { exportExposureSelection } from "../src/exposure-export.js";
 import { FrameProxyCache } from "../src/frame-cache.js";
 import { PlaybackProxy } from "../src/playback-proxy.js";
 import { probeVideo } from "../src/probe.js";
@@ -480,6 +481,52 @@ test("opens the viewer with pending cel data and fills it after background analy
     cadenceLabel: "On twos",
     elapsedDuration: { numerator: "1", denominator: "2" },
   });
+  const exportDirectory = join(directory, "exported cels");
+  const exported = await service.exportSelection({
+    startPosition: 1,
+    endPosition: 2,
+    frameCount: 2,
+  }, exportDirectory);
+  assert.deepEqual(exported.exportedTimelinePositions, [0, 2]);
+  assert.equal(exported.outputDirectory, join(exportDirectory, "held drawing.mp4_frames"));
+  assert.deepEqual(await readdir(exported.outputDirectory), ["2_0001.png", "2_0002.png"]);
+  const exportedProbe = await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-select_streams", "v:0",
+    "-show_entries", "stream=pix_fmt",
+    "-of", "json",
+    exported.paths[0]!,
+  ]);
+  assert.deepEqual(
+    (JSON.parse(exportedProbe.stdout) as { streams: readonly { pix_fmt: string }[] }).streams,
+    [{ pix_fmt: "rgb24" }],
+  );
+  const [firstPixels, secondPixels] = await Promise.all(exported.paths.map(async (path) => (
+    execFileAsync("ffmpeg", [
+      "-v", "error",
+      "-i", path,
+      "-f", "rawvideo",
+      "-pix_fmt", "gray",
+      "pipe:1",
+    ], { encoding: "buffer" })
+  )));
+  assert.ok(byteTotal(firstPixels!.stdout) < byteTotal(secondPixels!.stdout));
+  const originalFirstExport = await readFile(exported.paths[0]!);
+  const differentPrefix = await service.exportSelection({
+    startPosition: 0,
+    endPosition: 0,
+    frameCount: 1,
+  }, exportDirectory);
+  assert.equal(differentPrefix.outputDirectory, exported.outputDirectory);
+  assert.deepEqual(differentPrefix.paths.map((path) => basename(path)), ["1_0001.png"]);
+  const collisionExport = await service.exportSelection({
+    startPosition: 1,
+    endPosition: 2,
+    frameCount: 2,
+  }, exportDirectory);
+  assert.equal(collisionExport.outputDirectory, join(exportDirectory, "held drawing.mp4_frames_2"));
+  assert.deepEqual(await readdir(collisionExport.outputDirectory), ["2_0001.png", "2_0002.png"]);
+  assert.deepEqual(await readFile(exported.paths[0]!), originalFirstExport);
   assert.deepEqual(await service.getAdjacentCelPosition(1, "next"), {
     status: "ready",
     timelinePosition: 2,
@@ -523,6 +570,71 @@ test("opens the viewer with pending cel data and fills it after background analy
   await service.applyExposureCorrection({ type: "merge-next", timelinePosition: 1 });
   assert.equal((await service.getCorrectionInformation(1) as { canRedo: boolean }).canRedo, false);
   assert.ok((await stat(`${sourcePath}.animstudy`)).size > 0);
+});
+
+test("exports full-resolution frames in decoded display orientation", async (context) => {
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+    await execFileAsync("ffprobe", ["-version"]);
+  } catch {
+    context.skip("ffmpeg and ffprobe are required for this integration test");
+    return;
+  }
+
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-oriented-export-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const basePath = join(directory, "base.mp4");
+  const sourcePath = join(directory, "rotated fixture.mp4");
+  await execFileAsync("ffmpeg", [
+    "-v", "error",
+    "-f", "lavfi",
+    "-i", "testsrc2=s=96x54:r=1:d=1",
+    "-c:v", "libx264",
+    "-pix_fmt", "yuv420p",
+    "-y",
+    basePath,
+  ]);
+  await execFileAsync("ffmpeg", [
+    "-v", "error",
+    "-i", basePath,
+    "-c", "copy",
+    "-bsf:v", "h264_metadata=display_orientation=insert:rotate=90",
+    "-y",
+    sourcePath,
+  ]);
+  const exported = await exportExposureSelection({
+    sourcePath,
+    outputDirectory: join(directory, "output"),
+    timeline: {
+      schemaVersion: 1,
+      sourceFingerprint: "rotated-export-fixture",
+      proxySettings: { width: 64, height: 36, edgeLowThreshold: 0.1, edgeHighThreshold: 0.4 },
+      classificationSettings: { sameThreshold: 0.01, changedThreshold: 0.04 },
+      frameCount: 1,
+      spans: [{
+        id: "exposure-0",
+        exposureIndex: 0,
+        displayCelNumber: 1,
+        startTimelinePosition: 0,
+        endTimelinePosition: 0,
+        frameCount: 1,
+        representativeTimelinePosition: 0,
+      }],
+      reviewBoundaries: [],
+    },
+    range: { startPosition: 0, endPosition: 0, frameCount: 1 },
+  });
+  const probe = await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-select_streams", "v:0",
+    "-show_entries", "stream=width,height,pix_fmt",
+    "-of", "json",
+    exported.paths[0]!,
+  ]);
+  assert.deepEqual(
+    (JSON.parse(probe.stdout) as { streams: readonly unknown[] }).streams,
+    [{ width: 54, height: 96, pix_fmt: "rgb24" }],
+  );
 });
 
 interface SyncEvents {

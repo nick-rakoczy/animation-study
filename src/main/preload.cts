@@ -13,6 +13,8 @@ const api: AnimationStudyApi = {
   undoExposureCorrection: () => ipcRenderer.invoke("media:undo-exposure-correction"),
   redoExposureCorrection: () => ipcRenderer.invoke("media:redo-exposure-correction"),
   getTimelineThumbnails: (sampleCount) => ipcRenderer.invoke("media:get-timeline-thumbnails", sampleCount),
+  exportSelection: (range) => ipcRenderer.invoke("media:export-selection", range),
+  cancelExport: () => ipcRenderer.invoke("media:cancel-export"),
 };
 
 contextBridge.exposeInMainWorld("animationStudy", api);

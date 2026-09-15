@@ -50,6 +50,20 @@ app.whenReady().then(() => {
   ipcMain.handle("media:undo-exposure-correction", () => service.undoExposureCorrection());
   ipcMain.handle("media:redo-exposure-correction", () => service.redoExposureCorrection());
   ipcMain.handle("media:get-timeline-thumbnails", (_event, sampleCount: number) => service.getTimelineThumbnails(sampleCount));
+  ipcMain.handle("media:export-selection", async (_event, range) => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: "Choose export folder",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    const outputDirectory = result.filePaths[0];
+    if (result.canceled || !outputDirectory) return null;
+    const exported = await service.exportSelection(range, outputDirectory);
+    return {
+      outputDirectory: exported.outputDirectory,
+      exportedFrameCount: exported.paths.length,
+    };
+  });
+  ipcMain.handle("media:cancel-export", () => service.cancelExport());
 
   createWindow();
   app.on("activate", () => {

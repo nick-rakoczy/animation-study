@@ -114,6 +114,14 @@ button:disabled {
   background: #e4a853;
 }
 
+.export-status {
+  color: #aeb0b4;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .timeline-scale-controls {
   display: flex;
   gap: 4px;

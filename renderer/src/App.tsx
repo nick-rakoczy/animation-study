@@ -17,6 +17,8 @@ export function App() {
   const [correctionInformation, setCorrectionInformation] = useState<CorrectionInformation | null>(null);
   const [correctionRevision, setCorrectionRevision] = useState(0);
   const [correctionBusy, setCorrectionBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<BackgroundAnalysisStatus | null>(null);
   const [timelineThumbnails, setTimelineThumbnails] = useState<readonly TimelineThumbnail[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
@@ -58,6 +60,7 @@ export function App() {
         setTimelineThumbnails([]);
         setTimelineScaleIndex(defaultTimelineScaleIndex);
         setTimelineRange(null);
+        setExportStatus(null);
         setRangeSelectionMode(false);
         timelineRangeAnchor.current = null;
         setShowingPlayback(false);
@@ -318,6 +321,25 @@ export function App() {
     }
   }, [correctionBusy, video]);
 
+  const exportSelection = useCallback(async () => {
+    if (!timelineRange || exportBusy) return;
+    setExportBusy(true);
+    setExportStatus(null);
+    setError(null);
+    try {
+      const result = await window.animationStudy.exportSelection(timelineRange);
+      if (result) {
+        setExportStatus(`Exported ${result.exportedFrameCount} ${result.exportedFrameCount === 1 ? "cel" : "cels"} to ${result.outputDirectory}`);
+      }
+    } catch (caught) {
+      const message = errorMessage(caught);
+      if (message.includes("Export cancelled")) setExportStatus("Export cancelled");
+      else setError(message);
+    } finally {
+      setExportBusy(false);
+    }
+  }, [exportBusy, timelineRange]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!video) return;
@@ -505,6 +527,13 @@ export function App() {
           </span>
           <div className="timeline-range-controls">
             <button
+              disabled={!timelineRange || analysisStatus?.status !== "ready" || exportBusy}
+              onClick={() => void exportSelection()}
+            >{exportBusy ? "Exporting..." : "Export"}</button>
+            {exportBusy ? (
+              <button onClick={() => void window.animationStudy.cancelExport()}>Cancel export</button>
+            ) : null}
+            <button
               title="Select a range with pointer drag, or hold Shift while dragging"
               aria-pressed={rangeSelectionMode}
               disabled={!video}
@@ -516,6 +545,7 @@ export function App() {
               onClick={() => setTimelineRange(null)}
             >Clear</button>
           </div>
+          {exportStatus ? <output className="export-status" aria-live="polite">{exportStatus}</output> : null}
           <div className="timeline-scale-controls" aria-label="Timeline scale controls">
             <button
               aria-label="Decrease timeline scale"
