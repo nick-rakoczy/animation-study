@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CelInformation, DisplayFrame, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
 import { timelinePositionAtPlaybackTime } from "../../src/playback.js";
+import { createInclusiveTimelineRange, timelineRangeFractions, type InclusiveTimelineRange } from "../../src/timeline-range.js";
 import { defaultTimelineScaleIndex, nextTimelineScaleIndex, timelineSampleCounts } from "../../src/timeline-scale.js";
 import { timelinePositionFromOffset } from "../../src/timeline-scrub.js";
 
@@ -13,6 +14,8 @@ export function App() {
   const [timelineThumbnails, setTimelineThumbnails] = useState<readonly TimelineThumbnail[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineScaleIndex, setTimelineScaleIndex] = useState(defaultTimelineScaleIndex);
+  const [timelineRange, setTimelineRange] = useState<InclusiveTimelineRange | null>(null);
+  const [rangeSelectionMode, setRangeSelectionMode] = useState(false);
   const [showingPlayback, setShowingPlayback] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -21,6 +24,7 @@ export function App() {
   const displayedFramePosition = useRef(0);
   const requestedFramePosition = useRef<number | null>(null);
   const frameRequestRunning = useRef(false);
+  const timelineRangeAnchor = useRef<number | null>(null);
 
   useEffect(() => {
     void window.animationStudy.getMediaToolStatus().then(setTools);
@@ -40,6 +44,9 @@ export function App() {
         setCelInformation({ status: "pending" });
         setTimelineThumbnails([]);
         setTimelineScaleIndex(defaultTimelineScaleIndex);
+        setTimelineRange(null);
+        setRangeSelectionMode(false);
+        timelineRangeAnchor.current = null;
         setShowingPlayback(false);
         setPlaying(false);
       }
@@ -110,11 +117,25 @@ export function App() {
     })();
   }, [video]);
 
-  const scrubTimeline = useCallback((clientX: number, element: HTMLDivElement) => {
-    if (!video) return;
+  const timelinePositionForPointer = useCallback((clientX: number, element: HTMLDivElement) => {
+    if (!video) return null;
     const bounds = element.getBoundingClientRect();
-    showFrame(timelinePositionFromOffset(clientX - bounds.left, bounds.width, video.playbackFrames.length));
-  }, [showFrame, video]);
+    return timelinePositionFromOffset(clientX - bounds.left, bounds.width, video.playbackFrames.length);
+  }, [video]);
+
+  const moveTimelinePointer = useCallback((clientX: number, element: HTMLDivElement) => {
+    if (!video) return;
+    const position = timelinePositionForPointer(clientX, element);
+    if (position === null) return;
+    if (timelineRangeAnchor.current !== null) {
+      setTimelineRange(createInclusiveTimelineRange(
+        timelineRangeAnchor.current,
+        position,
+        video.playbackFrames.length,
+      ));
+    }
+    showFrame(position);
+  }, [showFrame, timelinePositionForPointer, video]);
 
   const scaleTimeline = useCallback((direction: -1 | 1) => {
     if (!video) return;
@@ -226,6 +247,9 @@ export function App() {
   const nextScaleIndex = video
     ? nextTimelineScaleIndex(timelineScaleIndex, 1, video.playbackFrames.length)
     : timelineScaleIndex;
+  const rangeFractions = video && timelineRange
+    ? timelineRangeFractions(timelineRange, video.playbackFrames.length)
+    : null;
 
   return (
     <main className="app-shell">
@@ -292,6 +316,23 @@ export function App() {
         <header className="timeline-header">
           <span>Timeline</span>
           <span className="timeline-density">{effectiveSampleCount} {effectiveSampleCount === 1 ? "sample" : "samples"}</span>
+          <span className="timeline-range-readout">
+            {timelineRange
+              ? `Frames ${timelineRange.startPosition + 1} to ${timelineRange.endPosition + 1} (${timelineRange.frameCount})`
+              : "No range selected"}
+          </span>
+          <div className="timeline-range-controls">
+            <button
+              aria-pressed={rangeSelectionMode}
+              disabled={!video}
+              onClick={() => setRangeSelectionMode((active) => !active)}
+            >Select range</button>
+            <button
+              aria-label="Clear timeline range"
+              disabled={!timelineRange}
+              onClick={() => setTimelineRange(null)}
+            >Clear</button>
+          </div>
           <div className="timeline-scale-controls" aria-label="Timeline scale controls">
             <button
               aria-label="Decrease timeline scale"
@@ -317,7 +358,7 @@ export function App() {
         {video ? (
           timelineThumbnails.length > 0 ? (
             <div
-              className="filmstrip"
+              className={rangeSelectionMode ? "filmstrip selecting-range" : "filmstrip"}
               role="slider"
               aria-label="Timeline playhead"
               aria-valuemin={1}
@@ -326,16 +367,31 @@ export function App() {
               tabIndex={0}
               onPointerDown={(event) => {
                 event.currentTarget.setPointerCapture(event.pointerId);
-                scrubTimeline(event.clientX, event.currentTarget);
+                const position = timelinePositionForPointer(event.clientX, event.currentTarget);
+                if (position === null) return;
+                if (rangeSelectionMode || event.shiftKey) {
+                  timelineRangeAnchor.current = position;
+                  setTimelineRange(createInclusiveTimelineRange(position, position, video.playbackFrames.length));
+                } else {
+                  timelineRangeAnchor.current = null;
+                }
+                showFrame(position);
               }}
               onPointerMove={(event) => {
                 if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                  scrubTimeline(event.clientX, event.currentTarget);
+                  moveTimelinePointer(event.clientX, event.currentTarget);
                 }
               }}
               onPointerUp={(event) => {
-                scrubTimeline(event.clientX, event.currentTarget);
+                moveTimelinePointer(event.clientX, event.currentTarget);
+                const selectedRange = timelineRangeAnchor.current !== null;
+                timelineRangeAnchor.current = null;
+                if (selectedRange) setRangeSelectionMode(false);
                 event.currentTarget.releasePointerCapture(event.pointerId);
+              }}
+              onPointerCancel={() => {
+                timelineRangeAnchor.current = null;
+                setRangeSelectionMode(false);
               }}
             >
               {timelineThumbnails.map((thumbnail) => (
@@ -347,6 +403,16 @@ export function App() {
                   <figcaption>{thumbnail.displayFrameNumber}</figcaption>
                 </figure>
               ))}
+              {rangeFractions ? (
+                <div
+                  className="timeline-range-selection"
+                  style={{
+                    left: `${rangeFractions.left * 100}%`,
+                    width: `${rangeFractions.width * 100}%`,
+                  }}
+                  aria-hidden="true"
+                />
+              ) : null}
               <div className="timeline-playhead" style={{ left: `${playheadPercent}%` }} aria-hidden="true" />
             </div>
           ) : (

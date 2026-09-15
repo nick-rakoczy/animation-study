@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Inclusive timeline range selection.
+Cel navigation with `Shift+Left` and `Shift+Right`.
 
 ## Phase 0: decisions and technical proofs
 
@@ -72,7 +72,7 @@ Inclusive timeline range selection.
 - [x] Add exact playhead scrubbing across sampled thumbnails.
 - [x] Add horizontal timeline scrolling.
 - [x] Add `+` and `-` timeline scale controls.
-- [ ] Add inclusive timeline range selection.
+- [x] Add inclusive timeline range selection.
 - [ ] Add `Shift+Left` and `Shift+Right` cel navigation.
 - [ ] Add split, merge, representative-frame selection, and boundary confirmation.
 - [ ] Add undo and redo for every correction.
@@ -144,12 +144,13 @@ Inclusive timeline range selection.
 | 2026-09-14 | Exact timeline scrubbing tests | Mapped the full filmstrip width to clamped integer source-frame positions, tracked pointer drags, and queued the newest exact frame while decoding |
 | 2026-09-14 | Horizontal filmstrip scrolling test | Kept thumbnails at a fixed display height in a content-width row, enabled native horizontal overflow, and mapped vertical wheel input to horizontal movement |
 | 2026-09-14 | Timeline scale tests | Changed filmstrip sampling through five bounded density levels, skipped ineffective levels for short sources, and added button and keyboard controls |
+| 2026-09-14 | Inclusive timeline range tests | Normalized forward and reverse drags, counted both endpoint frames, gave one-frame ranges visible width, and added range-mode and Shift-drag controls |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
-- The timeline does not yet support inclusive range selection.
+- Timeline ranges are session-only until export and project correction persistence are implemented.
 - Analysis progress is not shown in the interface yet. Timeline corrections and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

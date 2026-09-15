@@ -76,10 +76,42 @@ button:disabled {
   text-transform: none;
 }
 
-.timeline-scale-controls {
+.timeline-range-readout {
+  min-width: 0;
+  overflow: hidden;
+  color: #9b9da2;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.timeline-range-controls {
   display: flex;
   gap: 4px;
   margin-left: auto;
+}
+
+.timeline-range-controls button {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 18px;
+  text-transform: none;
+}
+
+.timeline-range-controls button[aria-pressed="true"] {
+  color: #191510;
+  border-color: #e4a853;
+  background: #e4a853;
+}
+
+.timeline-scale-controls {
+  display: flex;
+  gap: 4px;
 }
 
 .timeline-scale-controls button {
@@ -114,6 +146,20 @@ button:disabled {
 .filmstrip:focus-visible {
   outline: 2px solid #e4a853;
   outline-offset: 2px;
+}
+
+.filmstrip.selecting-range {
+  cursor: crosshair;
+}
+
+.timeline-range-selection {
+  position: absolute;
+  z-index: 1;
+  top: -4px;
+  bottom: -4px;
+  pointer-events: none;
+  border-inline: 1px solid #f0bc70;
+  background: rgb(228 168 83 / 25%);
 }
 
 .timeline-playhead {
