@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Long-source playback-proxy validation.
+Analysis proxy generation.
 
 ## Phase 0: decisions and technical proofs
 
@@ -35,7 +35,7 @@ Long-source playback-proxy validation.
 - [x] Support input paths containing spaces in the integration test.
 - [x] Add exact previous, next, first, and last frame controls.
 - [x] Add `Left`, `Right`, `,`, `.`, `Home`, and `End` frame navigation.
-- [ ] Measure cached forward and backward frame steps against the 1/30-second target.
+- [x] Measure cached forward and backward frame steps against the 1/30-second target.
 - [x] Add normal source-timed video playback.
 - [x] Add synchronized source audio during playback.
 - [x] Keep frame stepping silent after audio playback exists.
@@ -43,7 +43,7 @@ Long-source playback-proxy validation.
 - [x] Map playback progress to exact indexed frame positions for variable-rate video.
 - [x] Add `Space` play and pause behavior.
 - [x] Add automated audio and video synchronization coverage.
-- [ ] Confirm that one-hour sources do not require a full-resolution frame sequence.
+- [x] Confirm that one-hour sources do not require a full-resolution frame sequence.
 
 ## Phase 2: exposure analysis
 
@@ -116,7 +116,7 @@ Long-source playback-proxy validation.
 
 | Date | Check | Result |
 | --- | --- | --- |
-| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback-proxy synchronization, and renderer asset-path tests |
+| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback-proxy synchronization, one-hour source, and renderer asset-path tests |
 | 2026-09-14 | `npm run typecheck` | Passed core and renderer TypeScript checks |
 | 2026-09-14 | `npm run build` | Passed TypeScript and production renderer builds |
 | 2026-09-14 | Constant-rate fixture at `24000/1001` | Returned 24 indexed frames with exact rational timing |
@@ -126,6 +126,8 @@ Long-source playback-proxy validation.
 | 2026-09-14 | Electron rendered-DOM inspection | React root contained the viewer, information panel, and transport controls |
 | 2026-09-14 | Electron Linux playback smoke test | Loaded a VP9/Opus proxy with both streams starting at zero; video reached `HAVE_ENOUGH_DATA` and playback advanced |
 | 2026-09-14 | Automated audio/video synchronization fixture | A decoded flash and tone retained their relative timing through proxy generation within 30 ms |
+| 2026-09-14 | One-hour 1080p source fixture | Kept at most three 1280-pixel PNG proxies plus one compressed WebM playback file; created no full-resolution frame sequence |
+| 2026-09-14 | `npm run benchmark:frame-step` | Across 200 cached 1280x720 PNG loads per direction, forward steps had a 1.743 ms maximum and backward steps had a 1.998 ms maximum; both passed the 33.333 ms target |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
@@ -134,5 +136,4 @@ Long-source playback-proxy validation.
 - The frame-by-frame filmstrip timeline does not exist yet.
 - Exposure detection, cel information, corrections, sidecar persistence, and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
-- The 1/30-second stepping target has not been measured on the reference machine.
 - The minimum supported FFmpeg version has not been selected.

@@ -12,6 +12,7 @@
     "build": "npm run build:core && npm run build:renderer",
     "build:core": "tsc -p tsconfig.json",
     "build:renderer": "tsc -p renderer/tsconfig.json && vite build",
+    "benchmark:frame-step": "npm run build:core && node dist/src/frame-step-benchmark.js",
     "start": "npm run build && electron .",
     "probe": "node dist/src/cli.js",
     "test": "npm run build && node --test dist/**/*.test.js",

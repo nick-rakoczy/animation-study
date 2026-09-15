@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -153,6 +153,86 @@ test("keeps a timed audio event aligned with its video frame in the playback pro
     `playback proxy changed audio/video skew from ${sourceSkew}s to ${proxySkew}s`,
   );
   await playback.clear();
+});
+
+test("opens a one-hour 1080p source without creating a full-resolution frame sequence", async (context) => {
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+    await execFileAsync("ffprobe", ["-version"]);
+  } catch {
+    context.skip("ffmpeg and ffprobe are required for this integration test");
+    return;
+  }
+
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-long-source-test-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const sourcePath = join(directory, "one hour 1080p.mp4");
+  const cacheRoot = join(directory, "cache");
+  await execFileAsync("ffmpeg", [
+    "-v", "error",
+    "-f", "lavfi",
+    "-i", "color=c=black:s=1920x1080:r=1/60:d=3600",
+    "-c:v", "libx264",
+    "-preset", "ultrafast",
+    "-pix_fmt", "yuv420p",
+    "-y",
+    sourcePath,
+  ]);
+
+  const timing = await probeVideo(sourcePath);
+  assert.equal(timing.stream.width, 1920);
+  assert.equal(timing.stream.height, 1080);
+  assert.equal(timing.frameCount, 60);
+
+  const frameCache = new FrameProxyCache({
+    sourcePath,
+    timing,
+    cacheRoot,
+    widthLimit: 1280,
+    prefetchRadius: 2,
+    maxEntries: 5,
+  });
+  const firstFrame = await frameCache.getFrame(0);
+  const frameProbe = await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-select_streams", "v:0",
+    "-show_entries", "stream=width,height",
+    "-of", "json",
+    firstFrame.path,
+  ]);
+  const frameMetadata = JSON.parse(frameProbe.stdout) as {
+    readonly streams: readonly { readonly width: number; readonly height: number }[];
+  };
+  assert.deepEqual(frameMetadata.streams, [{ width: 1280, height: 720 }]);
+
+  const playback = new PlaybackProxy({
+    sourcePath,
+    timing,
+    cacheRoot,
+    widthLimit: 1280,
+  });
+  const playbackPath = await playback.create();
+  const playbackProbe = await execFileAsync("ffprobe", [
+    "-v", "error",
+    "-select_streams", "v:0",
+    "-show_entries", "stream=width,height:format=duration",
+    "-of", "json",
+    playbackPath,
+  ]);
+  const playbackMetadata = JSON.parse(playbackProbe.stdout) as {
+    readonly streams: readonly { readonly width: number; readonly height: number }[];
+    readonly format: { readonly duration: string };
+  };
+  assert.deepEqual(playbackMetadata.streams, [{ width: 1280, height: 720 }]);
+  assert.equal(Number(playbackMetadata.format.duration), 3600);
+
+  const cacheEntries = await readdir(cacheRoot, { recursive: true });
+  const pngEntries = cacheEntries.filter((entry) => entry.endsWith(".png"));
+  const webmEntries = cacheEntries.filter((entry) => entry.endsWith(".webm"));
+  assert.ok(pngEntries.length <= 3, `expected at most 3 cached PNG frames, found ${pngEntries.length}`);
+  assert.equal(webmEntries.length, 1);
+
+  await Promise.all([frameCache.clear(), playback.clear()]);
 });
 
 interface SyncEvents {
