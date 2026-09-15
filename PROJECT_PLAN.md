@@ -366,7 +366,7 @@ Exit condition: a clean machine can install the application, analyze a fixture, 
 
 - Drawing or annotation inside the application.
 - Onion skin and side-by-side frame comparison.
-- Audio playback and waveform display.
+- Audio waveform display. Synchronized source audio during normal playback remains required.
 - Motion-compensated detection for pans and camera shake.
 - Crop and detection masks.
 - Automatic character or foreground segmentation.
