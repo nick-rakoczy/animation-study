@@ -22,6 +22,12 @@ test("saves partial and completed analysis snapshots to a SQLite sidecar", async
     frameCount: scores.frameCount,
     boundaries: scores.boundaries.slice(0, 1),
   });
+  const expected = {
+    sourceFingerprint: scores.sourceFingerprint,
+    proxySettings: scores.settings,
+    frameCount: scores.frameCount,
+  };
+  assert.equal(project.loadCompleted(expected), null);
 
   assert.equal(project.path, `${sourcePath}.animstudy`);
   assert.equal((await readFile(project.path)).subarray(0, 16).toString(), "SQLite format 3\0");
@@ -42,6 +48,16 @@ test("saves partial and completed analysis snapshots to a SQLite sidecar", async
 
   const timeline = buildExposureSpans(classifyBoundaries(scores));
   project.saveCompleted({ scores, timeline, sensitivity: 50 });
+
+  let analysisRunCount = 0;
+  const resolved = await project.loadCompletedOrAnalyze(expected, async () => {
+    analysisRunCount += 1;
+    return { scores, timeline, sensitivity: 50 };
+  });
+  assert.equal(analysisRunCount, 0);
+  assert.equal(resolved.loadedFromSidecar, true);
+  assert.deepEqual(resolved.snapshot, { scores, timeline, sensitivity: 50 });
+  assert.equal(project.loadCompleted({ ...expected, sourceFingerprint: "different-source" }), null);
 
   database = new DatabaseSync(project.path, { readOnly: true });
   assert.deepEqual({ ...database.prepare(`
@@ -78,6 +94,39 @@ test("saves partial and completed analysis snapshots to a SQLite sidecar", async
     { display_cel_number: 2, start_timeline_position: 2, end_timeline_position: 2 },
   ]);
   database.close();
+});
+
+test("rejects inconsistent completed rows instead of rerunning analysis", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-project-corrupt-test-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const project = new AnalysisProject(join(directory, "fixture.mp4"));
+  const scores = fixtureScores();
+  const timeline = buildExposureSpans(classifyBoundaries(scores));
+  project.saveCompleted({ scores, timeline, sensitivity: 50 });
+
+  const database = new DatabaseSync(project.path);
+  database.prepare(`
+    UPDATE boundary_scores SET classification = 'same'
+    WHERE from_timeline_position = 1
+  `).run();
+  database.close();
+
+  let analysisRunCount = 0;
+  await assert.rejects(
+    project.loadCompletedOrAnalyze(
+      {
+        sourceFingerprint: scores.sourceFingerprint,
+        proxySettings: scores.settings,
+        frameCount: scores.frameCount,
+      },
+      async () => {
+        analysisRunCount += 1;
+        return { scores, timeline, sensitivity: 50 };
+      },
+    ),
+    /Could not load the completed analysis sidecar/,
+  );
+  assert.equal(analysisRunCount, 0);
 });
 
 test("rejects incomplete completed snapshots before replacing saved data", async (context) => {

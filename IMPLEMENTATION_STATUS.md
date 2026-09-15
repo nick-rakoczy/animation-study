@@ -6,7 +6,7 @@ This checklist tracks implementation against [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Current focus
 
-Loading completed analysis without rerunning work.
+Detector fixture set and threshold tuning.
 
 ## Phase 0: decisions and technical proofs
 
@@ -55,7 +55,7 @@ Loading completed analysis without rerunning work.
 - [x] Add selected-range reanalysis and a preview cel count.
 - [x] Add job progress and cancellation.
 - [x] Save partial and completed analysis results to the sidecar project.
-- [ ] Load saved analysis without rerunning completed work.
+- [x] Load saved analysis without rerunning completed work.
 - [ ] Tune the detector against the fixture set.
 
 ## Phase 3: study interface
@@ -116,7 +116,7 @@ Loading completed analysis without rerunning work.
 
 | Date | Check | Result |
 | --- | --- | --- |
-| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, analysis persistence, job cancellation, and renderer asset-path tests |
+| 2026-09-14 | `npm test` | Passed timing, FFmpeg integration, playback synchronization, one-hour source, exposure analysis, sidecar save and load, job cancellation, and renderer asset-path tests |
 | 2026-09-14 | `npm run typecheck` | Passed core and renderer TypeScript checks |
 | 2026-09-14 | `npm run build` | Passed TypeScript and production renderer builds |
 | 2026-09-14 | Constant-rate fixture at `24000/1001` | Returned 24 indexed frames with exact rational timing |
@@ -136,12 +136,13 @@ Loading completed analysis without rerunning work.
 | 2026-09-14 | Selected-range analysis tests | Reclassified only internal boundaries at the requested sensitivity, previewed the resulting cel count, handled one-frame selections, and rejected invalid ranges |
 | 2026-09-14 | Analysis job tests | Reported frame progress for proxy generation and both scoring passes, reported cache hits, cancelled scoring after one frame, and left no partial score file |
 | 2026-09-14 | Analysis sidecar tests | Created a SQLite `.animstudy` file, saved a partial score prefix, replaced it with a validated completed analysis in one transaction, and preserved the prior snapshot after invalid input |
+| 2026-09-14 | Analysis reload tests | Reconstructed scores and exposures from a matching completed sidecar without calling the analyzer, treated partial and mismatched data as cache misses, and rejected inconsistent completed rows without rerunning work |
 | 2026-09-14 | `git diff --check` | Passed |
 
 ## Known limitations in the current build
 
 - Opening a source currently waits for a complete 1280-pixel-wide VP9/Opus playback proxy. Long-source generation time, progress, cancellation, and cache reuse have not been implemented.
 - The frame-by-frame filmstrip timeline does not exist yet.
-- Analysis progress is not shown in the interface yet. Loading sidecar analysis, cel information, corrections, and export do not exist yet.
+- Analysis progress is not shown in the interface yet. Cel information, corrections, and export do not exist yet.
 - The proxy cache clears when a source opens because source-content hashing has not been implemented.
 - The minimum supported FFmpeg version has not been selected.

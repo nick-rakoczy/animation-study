@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { existsSync } from "node:fs";
 import type { AnalysisProxySettings } from "./analysis-proxy.js";
 import type { AnalysisScores, FrameComponentScore } from "./analysis-score.js";
 import { classifyBoundaries, type ClassifiedBoundary } from "./boundary-classifier.js";
@@ -16,6 +17,17 @@ export interface CompletedAnalysisSnapshot {
   readonly scores: AnalysisScores;
   readonly timeline: ExposureTimeline;
   readonly sensitivity: number;
+}
+
+export interface AnalysisProjectMatch {
+  readonly sourceFingerprint: string;
+  readonly proxySettings: AnalysisProxySettings;
+  readonly frameCount: number;
+}
+
+export interface ResolvedAnalysisSnapshot {
+  readonly snapshot: CompletedAnalysisSnapshot;
+  readonly loadedFromSidecar: boolean;
 }
 
 export class AnalysisProject {
@@ -63,6 +75,83 @@ export class AnalysisProject {
       classifiedBoundaries: classified.boundaries,
       timeline: snapshot.timeline,
     });
+  }
+
+  loadCompleted(expected: AnalysisProjectMatch): CompletedAnalysisSnapshot | null {
+    if (!existsSync(this.path)) return null;
+    const database = new DatabaseSync(this.path, { readOnly: true });
+    try {
+      const state = database.prepare(`
+        SELECT status, source_fingerprint, proxy_settings_json,
+          classification_settings_json, sensitivity, frame_count,
+          completed_boundary_count
+        FROM analysis_state WHERE id = 1
+      `).get();
+      if (!state || state.status !== "completed") return null;
+      if (
+        state.source_fingerprint !== expected.sourceFingerprint ||
+        state.proxy_settings_json !== JSON.stringify(expected.proxySettings) ||
+        state.frame_count !== expected.frameCount
+      ) return null;
+
+      const classificationSettings = parseClassificationSettings(
+        state.classification_settings_json,
+      );
+      const sensitivity = requiredInteger(state.sensitivity, "analysis sensitivity");
+      const boundaryRows = database.prepare(`
+        SELECT from_timeline_position, to_timeline_position,
+          luma_difference, chroma_difference, edge_difference,
+          strongest_difference, classification, needs_review
+        FROM boundary_scores ORDER BY from_timeline_position
+      `).all();
+      if (
+        state.completed_boundary_count !== expected.frameCount - 1 ||
+        boundaryRows.length !== expected.frameCount - 1
+      ) throw new Error("The completed analysis has an incomplete boundary set");
+
+      const boundaries = boundaryRows.map((row): FrameComponentScore => ({
+        fromTimelinePosition: requiredInteger(row.from_timeline_position, "boundary start"),
+        toTimelinePosition: requiredInteger(row.to_timeline_position, "boundary end"),
+        lumaDifference: requiredNumber(row.luma_difference, "luma difference"),
+        chromaDifference: requiredNumber(row.chroma_difference, "chroma difference"),
+        edgeDifference: requiredNumber(row.edge_difference, "edge difference"),
+      }));
+      const scores: AnalysisScores = {
+        schemaVersion: 1,
+        sourceFingerprint: expected.sourceFingerprint,
+        settings: expected.proxySettings,
+        frameCount: expected.frameCount,
+        boundaries,
+      };
+      const classified = classifyBoundaries(scores, classificationSettings);
+      const timeline = buildExposureSpans(classified);
+      validateStoredClassifications(boundaryRows, classified.boundaries);
+      validateStoredExposures(database, timeline);
+      const snapshot = { scores, timeline, sensitivity };
+      validateCompletedSnapshot(snapshot);
+      return snapshot;
+    } catch (error) {
+      throw new Error("Could not load the completed analysis sidecar", { cause: error });
+    } finally {
+      database.close();
+    }
+  }
+
+  async loadCompletedOrAnalyze(
+    expected: AnalysisProjectMatch,
+    analyze: () => Promise<CompletedAnalysisSnapshot>,
+  ): Promise<ResolvedAnalysisSnapshot> {
+    const saved = this.loadCompleted(expected);
+    if (saved) return { snapshot: saved, loadedFromSidecar: true };
+
+    const snapshot = await analyze();
+    if (
+      snapshot.scores.sourceFingerprint !== expected.sourceFingerprint ||
+      snapshot.scores.frameCount !== expected.frameCount ||
+      JSON.stringify(snapshot.scores.settings) !== JSON.stringify(expected.proxySettings)
+    ) throw new Error("New analysis does not match the requested source");
+    this.saveCompleted(snapshot);
+    return { snapshot, loadedFromSidecar: false };
   }
 
   #save(snapshot: StoredSnapshot): void {
@@ -197,6 +286,71 @@ function createSchema(database: DatabaseSync): void {
       representative_timeline_position INTEGER NOT NULL
     ) STRICT;
   `);
+}
+
+function parseClassificationSettings(value: unknown): ExposureTimeline["classificationSettings"] {
+  if (typeof value !== "string") throw new Error("The completed analysis has no classification settings");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    throw new Error("The completed analysis has invalid classification settings", { cause: error });
+  }
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("The completed analysis has invalid classification settings");
+  }
+  const settings = parsed as Record<string, unknown>;
+  return {
+    sameThreshold: requiredNumber(settings.sameThreshold, "same threshold"),
+    changedThreshold: requiredNumber(settings.changedThreshold, "changed threshold"),
+  };
+}
+
+function validateStoredClassifications(
+  rows: readonly Record<string, unknown>[],
+  boundaries: readonly ClassifiedBoundary[],
+): void {
+  rows.forEach((row, index) => {
+    const expected = boundaries[index]!;
+    if (
+      row.strongest_difference !== expected.strongestDifference ||
+      row.classification !== expected.classification ||
+      row.needs_review !== (expected.classification === "uncertain" ? 1 : 0)
+    ) throw new Error(`Saved classification ${index} does not match its component scores`);
+  });
+}
+
+function validateStoredExposures(database: DatabaseSync, timeline: ExposureTimeline): void {
+  const rows = database.prepare(`
+    SELECT id, exposure_index, display_cel_number, start_timeline_position,
+      end_timeline_position, frame_count, representative_timeline_position
+    FROM exposures ORDER BY exposure_index
+  `).all();
+  const stored = rows.map((row) => ({
+    id: row.id,
+    exposureIndex: row.exposure_index,
+    displayCelNumber: row.display_cel_number,
+    startTimelinePosition: row.start_timeline_position,
+    endTimelinePosition: row.end_timeline_position,
+    frameCount: row.frame_count,
+    representativeTimelinePosition: row.representative_timeline_position,
+  }));
+  if (JSON.stringify(stored) !== JSON.stringify(timeline.spans)) {
+    throw new Error("Saved exposures do not match the boundary classifications");
+  }
+}
+
+function requiredNumber(value: unknown, name: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`The saved ${name} must be a finite number`);
+  }
+  return value;
+}
+
+function requiredInteger(value: unknown, name: string): number {
+  const number = requiredNumber(value, name);
+  if (!Number.isSafeInteger(number)) throw new Error(`The saved ${name} must be an integer`);
+  return number;
 }
 
 function validatePartialSnapshot(snapshot: PartialAnalysisSnapshot): void {
