@@ -54,4 +54,6 @@ chmod +x Animation-Study-0.1.0-x86_64.AppImage
 
 The build also creates `release/latest-linux.yml`. GitHub releases must include that file with the AppImage so packaged copies can find, verify, and install updates. The release workflow uploads both files.
 
+Pushes to `main` start the release workflow. Each successful run reads the major and minor numbers from `package.json`, finds the highest existing patch tag for that release line, and increments it. If the release line has no tags, it starts at patch `0`. To begin a new major or minor release line, update the version in `package.json`; the checked-in patch number is ignored by the workflow.
+
 AppImage normally uses FUSE. On a system without FUSE, run it with `APPIMAGE_EXTRACT_AND_RUN=1` or use `--appimage-extract` and start the extracted `AppRun` file.

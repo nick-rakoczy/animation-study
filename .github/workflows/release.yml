@@ -2,8 +2,12 @@ name: Linux release
 
 on:
   push:
-    tags:
-      - "**"
+    branches:
+      - main
+
+concurrency:
+  group: linux-release-main
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -17,6 +21,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -38,11 +44,37 @@ jobs:
       - name: Build and test
         run: npm test
 
-      - name: Set version from tag
+      - name: Select the next patch version
         run: |
-          release_version="${GITHUB_REF_NAME#v}"
+          base_version="$(node --print "require('./package.json').version")"
+          if [[ ! "$base_version" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
+            echo "package.json version must use major.minor.patch: $base_version" >&2
+            exit 1
+          fi
+
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          latest_patch="$({
+            git tag --list "$major.$minor.*" "v$major.$minor.*"
+          } | sed 's/^v//' | awk -F. '
+            $1 == major && $2 == minor && $3 ~ /^[0-9]+$/ {
+              if (!found || $3 > maximum) maximum = $3
+              found = 1
+            }
+            END { if (found) print maximum }
+          ' major="$major" minor="$minor")"
+
+          if [ -n "$latest_patch" ]; then
+            patch="$((latest_patch + 1))"
+          else
+            patch=0
+          fi
+
+          release_version="$major.$minor.$patch"
+          release_tag="v$release_version"
           npm version "$release_version" --no-git-tag-version --allow-same-version
           echo "RELEASE_VERSION=$release_version" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
 
       - name: Build AppImage
         run: npm run dist:linux
@@ -62,10 +94,11 @@ jobs:
             exit 1
           fi
 
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$appimage" "$update_metadata" --clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$appimage" "$update_metadata" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$appimage" "$update_metadata" \
+            gh release create "$RELEASE_TAG" "$appimage" "$update_metadata" \
               --generate-notes \
-              --title "$GITHUB_REF_NAME" \
-              --verify-tag
+              --target "$GITHUB_SHA" \
+              --title "$RELEASE_TAG"
+          fi
