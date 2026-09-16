@@ -49,15 +49,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           appimage="release/Animation-Study-${RELEASE_VERSION}-x86_64.AppImage"
+          update_metadata="release/latest-linux.yml"
           if [ ! -f "$appimage" ]; then
             echo "Expected AppImage was not produced: $appimage" >&2
             exit 1
           fi
+          if [ ! -f "$update_metadata" ]; then
+            echo "Expected update metadata was not produced: $update_metadata" >&2
+            exit 1
+          fi
 
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$appimage" --clobber
+            gh release upload "$GITHUB_REF_NAME" "$appimage" "$update_metadata" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$appimage" \
+            gh release create "$GITHUB_REF_NAME" "$appimage" "$update_metadata" \
               --generate-notes \
               --title "$GITHUB_REF_NAME" \
               --verify-tag

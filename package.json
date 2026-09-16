@@ -17,9 +17,10 @@
     "probe": "node dist/src/cli.js",
     "test": "npm run build && node --test dist/**/*.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json",
-    "dist:linux": "npm run build && electron-builder --linux AppImage --x64"
+    "dist:linux": "npm run build && electron-builder --linux AppImage --x64 --publish never"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
@@ -47,6 +48,11 @@
     ],
     "directories": {
       "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "nick-rakoczy",
+      "repo": "animation-study"
     },
     "linux": {
       "target": [

@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { ApplicationService } from "./application-service.js";
+import { startAppImageUpdater } from "./app-updater.js";
 import { getMediaToolStatus } from "../media-tools.js";
 import { findAvailableUpdate } from "../release-update.js";
 
@@ -89,7 +90,8 @@ app.whenReady().then(() => {
   ipcMain.handle("media:clear-unused-cache", () => service.clearUnusedCache());
 
   const window = createWindow();
-  void offerAvailableUpdate(window);
+  if (app.isPackaged && process.env.APPIMAGE) startAppImageUpdater(window);
+  else void offerAvailableUpdate(window);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
