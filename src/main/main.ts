@@ -1,13 +1,14 @@
 import { join } from "node:path";
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { ApplicationService } from "./application-service.js";
 import { getMediaToolStatus } from "../media-tools.js";
+import { findAvailableUpdate } from "../release-update.js";
 
 let mainWindow: BrowserWindow | null = null;
 let service: ApplicationService;
 
-function createWindow(): void {
-  mainWindow = new BrowserWindow({
+function createWindow(): BrowserWindow {
+  const window = new BrowserWindow({
     width: 1180,
     height: 760,
     minWidth: 760,
@@ -20,10 +21,32 @@ function createWindow(): void {
       sandbox: true,
     },
   });
-  void mainWindow.loadFile(join(import.meta.dirname, "../../../renderer-dist/index.html"));
-  mainWindow.on("closed", () => {
-    mainWindow = null;
+  mainWindow = window;
+  void window.loadFile(join(import.meta.dirname, "../../../renderer-dist/index.html"));
+  window.on("closed", () => {
+    if (mainWindow === window) mainWindow = null;
   });
+  return window;
+}
+
+async function offerAvailableUpdate(window: BrowserWindow): Promise<void> {
+  try {
+    const update = await findAvailableUpdate(app.getVersion());
+    if (!update || window.isDestroyed()) return;
+
+    const result = await dialog.showMessageBox(window, {
+      type: "info",
+      title: "Update available",
+      message: `Animation Study ${update.latestVersion} is available`,
+      detail: `You are using version ${update.currentVersion}. Open the GitHub release to get the update?`,
+      buttons: ["Get update", "Not now"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (result.response === 0) await shell.openExternal(update.releaseUrl);
+  } catch (error) {
+    console.warn("Could not check for an Animation Study update", error);
+  }
 }
 
 app.whenReady().then(() => {
@@ -65,7 +88,8 @@ app.whenReady().then(() => {
   ipcMain.handle("media:cancel-export", () => service.cancelExport());
   ipcMain.handle("media:clear-unused-cache", () => service.clearUnusedCache());
 
-  createWindow();
+  const window = createWindow();
+  void offerAvailableUpdate(window);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
