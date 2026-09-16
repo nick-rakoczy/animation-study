@@ -36,6 +36,19 @@ test("timeline thumbnails preserve their image aspect ratio without black contai
   assert.doesNotMatch(imageRule, /object-fit\s*:/);
 });
 
+test("source video fits inside the viewer without changing its aspect ratio", async () => {
+  const styles = await readFile("renderer/src/styles.css", "utf8");
+  const viewportRule = styles.match(/\.video-viewport \{(?<rule>[^}]*)\}/s)?.groups?.rule;
+  const videoRule = styles.match(/\.video-viewport video \{(?<rule>[^}]*)\}/s)?.groups?.rule;
+  assert.ok(viewportRule);
+  assert.ok(videoRule);
+  assert.match(viewportRule, /position:\s*absolute/);
+  assert.match(viewportRule, /inset:\s*20px/);
+  assert.match(videoRule, /width:\s*100%/);
+  assert.match(videoRule, /height:\s*100%/);
+  assert.match(videoRule, /object-fit:\s*contain/);
+});
+
 test("filmstrip scrubbing maps pointer input to an exact playhead position", async () => {
   const source = await readFile("renderer/src/App.tsx", "utf8");
   assert.match(source, /timelinePositionFromOffset/);

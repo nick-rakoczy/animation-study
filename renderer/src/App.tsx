@@ -452,7 +452,7 @@ export function App() {
       <section className="workspace">
         <div className="viewer" aria-busy={busy}>
           {video ? (
-            <>
+            <div className="video-viewport">
               <video
                 ref={videoElement}
                 className="source-video"
@@ -468,7 +468,7 @@ export function App() {
                 }}
                 onError={() => setError("The source could not be played by the embedded media decoder")}
               />
-            </>
+            </div>
           ) : (
             <div className="empty-state">
               <span className="frame-mark">▧</span>
