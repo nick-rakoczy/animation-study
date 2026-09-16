@@ -66,7 +66,7 @@ test("builds chronological spans without merging a returning drawing", () => {
   assert.deepEqual(timeline.spans.map((span) => span.displayCelNumber), [1, 2, 3]);
 });
 
-test("keeps uncertain boundaries in the provisional span and flags them for review", () => {
+test("splits at uncertain boundaries and flags the provisional split for review", () => {
   const classified = classifyBoundaries(scoresWithBoundaries([
     boundary(0, 0, 0, 0),
     boundary(1, 0.02, 0, 0),
@@ -74,11 +74,22 @@ test("keeps uncertain boundaries in the provisional span and flags them for revi
   ]));
   const timeline = buildExposureSpans(classified);
 
-  assert.deepEqual(timeline.spans.map((span) => [span.startTimelinePosition, span.endTimelinePosition]), [[0, 3]]);
+  assert.deepEqual(timeline.spans.map((span) => [span.startTimelinePosition, span.endTimelinePosition]), [[0, 1], [2, 3]]);
   assert.deepEqual(timeline.reviewBoundaries.map((item) => [
     item.fromTimelinePosition,
     item.toTimelinePosition,
   ]), [[1, 2]]);
+});
+
+test("does not coalesce a run of moving uncertain frames into one long hold", () => {
+  const classified = classifyBoundaries(scoresWithBoundaries(
+    Array.from({ length: 10 }, (_, index) => boundary(index, 0.02, 0, 0)),
+  ));
+  const timeline = buildExposureSpans(classified);
+
+  assert.equal(timeline.spans.length, 11);
+  assert.ok(timeline.spans.every((span) => span.frameCount === 1));
+  assert.equal(timeline.reviewBoundaries.length, 10);
 });
 
 test("builds one exposure for a single-frame source", () => {
@@ -108,7 +119,7 @@ test("maps sensitivity to thresholds and resets to the default", () => {
     changedThreshold: 0.02,
   });
 
-  const scores = scoresWithBoundaries([boundary(0, 0.03, 0, 0)]);
+  const scores = scoresWithBoundaries([boundary(0, 0.007, 0, 0)]);
   const sensitivity = new AnalysisSensitivity();
   assert.equal(sensitivity.analyze(scores).timeline.spans.length, 1);
 

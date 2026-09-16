@@ -58,6 +58,15 @@ test("accepts the frame duration field emitted by FFmpeg 9", () => {
   assert.deepEqual(result.frames.map((frame) => frame.presentationDurationTicks), ["40", "60"]);
 });
 
+test("uses the frame PTS when FFprobe omits its best-effort timestamp", () => {
+  const result = normalizeTiming(probeWithFrames([
+    { pts: 0, pkt_duration: 40 },
+    { pts: 40, pkt_duration: 40 },
+  ], "1/1000", "25/1"));
+
+  assert.deepEqual(result.frames.map((frame) => frame.presentationTimestampTicks), ["0", "40"]);
+});
+
 test("samples both ends without duplicate frame positions", () => {
   assert.deepEqual(chooseSamplePositions(101, 5), [0, 25, 50, 75, 100]);
   assert.deepEqual(chooseSamplePositions(3, 25), [0, 1, 2]);

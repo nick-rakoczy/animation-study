@@ -74,15 +74,49 @@ test("selects a representative only within its containing exposure", () => {
 });
 
 test("confirms uncertain boundaries as held or changed", () => {
-  const held = applyExposureCorrection(timeline, { type: "confirm-same", timelinePosition: 2 });
+  const provisionalTimeline: ExposureTimeline = {
+    ...timeline,
+    spans: [
+      {
+        ...timeline.spans[0]!,
+        endTimelinePosition: 1,
+        frameCount: 2,
+      },
+      {
+        ...timeline.spans[0]!,
+        id: "exposure-uncertain",
+        exposureIndex: 1,
+        displayCelNumber: 2,
+        startTimelinePosition: 2,
+        representativeTimelinePosition: 2,
+        frameCount: 2,
+      },
+      {
+        ...timeline.spans[1]!,
+        exposureIndex: 2,
+        displayCelNumber: 3,
+      },
+    ],
+  };
+
+  const held = applyExposureCorrection(provisionalTimeline, { type: "confirm-same", timelinePosition: 2 });
   assert.equal(held.spans.length, 2);
+  assert.deepEqual(held.spans.map((span) => [span.startTimelinePosition, span.endTimelinePosition]), [[0, 3], [4, 5]]);
   assert.equal(held.reviewBoundaries.length, 0);
 
-  const changed = applyExposureCorrection(timeline, { type: "confirm-changed", timelinePosition: 2 });
+  const changed = applyExposureCorrection(provisionalTimeline, { type: "confirm-changed", timelinePosition: 2 });
   assert.deepEqual(changed.spans.map((span) => span.startTimelinePosition), [0, 2, 4]);
   assert.equal(changed.reviewBoundaries.length, 0);
   assert.throws(
     () => applyExposureCorrection(held, { type: "confirm-changed", timelinePosition: 2 }),
     /no uncertain boundary/,
   );
+});
+
+test("supports uncertain boundaries saved inside spans by older projects", () => {
+  const held = applyExposureCorrection(timeline, { type: "confirm-same", timelinePosition: 2 });
+  assert.deepEqual(held.spans.map((span) => [span.startTimelinePosition, span.endTimelinePosition]), [[0, 3], [4, 5]]);
+
+  const changed = applyExposureCorrection(timeline, { type: "confirm-changed", timelinePosition: 2 });
+  assert.deepEqual(changed.spans.map((span) => [span.startTimelinePosition, span.endTimelinePosition]), [[0, 1], [2, 3], [4, 5]]);
 });

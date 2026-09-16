@@ -205,7 +205,10 @@ export class AnalysisProject {
       const timeline = correctionRow
         ? parseCorrectedTimeline(correctionRow.timeline_json, automaticTimeline)
         : automaticTimeline;
-      validateStoredExposures(database, timeline);
+      // Automatic exposures are derived from the saved component scores. Rebuild them so
+      // projects created under an older exposure policy adopt the current policy without
+      // discarding scores or overriding a user's saved corrections.
+      if (correctionRow) validateStoredExposures(database, timeline);
       const snapshot = { scores, timeline, sensitivity };
       validateCompletedSnapshot(snapshot, correctionRow !== undefined);
       return snapshot;

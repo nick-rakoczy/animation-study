@@ -40,7 +40,7 @@ export function buildExposureSpans(analysis: ClassifiedAnalysis): ExposureTimeli
       throw new Error(`Classified boundary ${index} does not describe adjacent timeline frames`);
     }
     if (boundary.classification === "uncertain") reviewBoundaries.push(boundary);
-    if (boundary.classification === "changed") {
+    if (boundary.classification !== "same") {
       spans.push(createSpan(spans.length, startTimelinePosition, boundary.fromTimelinePosition));
       startTimelinePosition = boundary.toTimelinePosition;
     }

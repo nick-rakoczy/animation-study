@@ -136,8 +136,9 @@ test("saves partial and completed analysis snapshots to a SQLite sidecar", async
     SELECT display_cel_number, start_timeline_position, end_timeline_position
     FROM exposures ORDER BY exposure_index
   `).all().map((row) => ({ ...row })), [
-    { display_cel_number: 1, start_timeline_position: 0, end_timeline_position: 1 },
-    { display_cel_number: 2, start_timeline_position: 2, end_timeline_position: 2 },
+    { display_cel_number: 1, start_timeline_position: 0, end_timeline_position: 0 },
+    { display_cel_number: 2, start_timeline_position: 1, end_timeline_position: 1 },
+    { display_cel_number: 3, start_timeline_position: 2, end_timeline_position: 2 },
   ]);
   database.close();
 });
@@ -150,7 +151,11 @@ test("persists corrected exposures and restores them instead of the automatic re
   const automaticTimeline = buildExposureSpans(classifyBoundaries(scores));
   project.saveCompleted({ scores, timeline: automaticTimeline, sensitivity: 50 });
 
-  const correctedTimeline = applyExposureCorrection(automaticTimeline, {
+  const confirmedHold = applyExposureCorrection(automaticTimeline, {
+    type: "confirm-same",
+    timelinePosition: 1,
+  });
+  const correctedTimeline = applyExposureCorrection(confirmedHold, {
     type: "select-representative",
     timelinePosition: 1,
   });
@@ -169,6 +174,38 @@ test("persists corrected exposures and restores them instead of the automatic re
     SELECT representative_timeline_position FROM exposures WHERE exposure_index = 0
   `).get()!.representative_timeline_position, 1);
   database.close();
+});
+
+test("rebuilds automatic exposures from saved scores when the exposure policy changes", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-policy-project-test-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const project = new AnalysisProject(join(directory, "fixture.mp4"));
+  const scores = fixtureScores();
+  const currentTimeline = buildExposureSpans(classifyBoundaries(scores));
+  project.saveCompleted({ scores, timeline: currentTimeline, sensitivity: 50 });
+
+  const database = new DatabaseSync(project.path);
+  database.exec("DELETE FROM exposures");
+  database.prepare(`
+    INSERT INTO exposures (
+      id, exposure_index, display_cel_number, start_timeline_position,
+      end_timeline_position, frame_count, representative_timeline_position
+    ) VALUES ('old-merged-exposure', 0, 1, 0, 1, 2, 0)
+  `).run();
+  database.prepare(`
+    INSERT INTO exposures (
+      id, exposure_index, display_cel_number, start_timeline_position,
+      end_timeline_position, frame_count, representative_timeline_position
+    ) VALUES ('old-changed-exposure', 1, 2, 2, 2, 1, 2)
+  `).run();
+  database.close();
+
+  const loaded = project.loadCompleted({
+    sourceFingerprint: scores.sourceFingerprint,
+    proxySettings: scores.settings,
+    frameCount: scores.frameCount,
+  });
+  assert.deepEqual(loaded?.timeline, currentTimeline);
 });
 
 test("rolls back a failed sidecar transaction and keeps the prior completed project", async (context) => {

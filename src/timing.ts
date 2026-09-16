@@ -33,6 +33,7 @@ interface RawStream {
 
 interface RawFrame {
   readonly best_effort_timestamp?: number | string;
+  readonly pts?: number | string;
   readonly duration?: number | string;
   readonly pkt_duration?: number | string;
   readonly pkt_dts?: number | string;
@@ -95,10 +96,11 @@ export function normalizeTiming(raw: RawProbe): NormalizedTiming {
   if (rawFrames.length === 0) throw new Error("ffprobe did not return any decoded video frames");
 
   const ordered = rawFrames.map((frame, decodedFrameIndex) => {
-    if (frame.best_effort_timestamp === undefined) {
+    const presentationTimestamp = frame.best_effort_timestamp ?? frame.pts;
+    if (presentationTimestamp === undefined) {
       throw new Error(`Frame ${decodedFrameIndex} has no presentation timestamp`);
     }
-    const timestampTicks = BigInt(frame.best_effort_timestamp);
+    const timestampTicks = BigInt(presentationTimestamp);
     return {
       raw: frame,
       decodedFrameIndex,

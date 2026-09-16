@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { BackgroundAnalysisStatus, CelInformation, CorrectionInformation, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
 import type { AnalysisJobStage } from "../../src/analysis-job.js";
 import type { ExposureCorrectionAction } from "../../src/exposure-correction.js";
@@ -6,6 +6,7 @@ import { appKeyboardAction } from "../../src/keyboard-shortcuts.js";
 import { playbackSeekTime, timelinePositionAtPlaybackTime } from "../../src/playback.js";
 import { createInclusiveTimelineRange, timelineRangeFractions, type InclusiveTimelineRange } from "../../src/timeline-range.js";
 import { defaultTimelineScaleIndex, nextTimelineScaleIndex, timelineSampleCounts } from "../../src/timeline-scale.js";
+import { scrollAdjustmentToReveal } from "../../src/timeline-scroll.js";
 import { timelinePositionFromOffset } from "../../src/timeline-scrub.js";
 
 export function App() {
@@ -31,7 +32,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const videoElement = useRef<HTMLVideoElement>(null);
   const openButton = useRef<HTMLButtonElement>(null);
+  const timelineScroller = useRef<HTMLDivElement>(null);
   const filmstrip = useRef<HTMLDivElement>(null);
+  const playhead = useRef<HTMLDivElement>(null);
   const focusTimelineWhenReady = useRef(false);
   const requestedTimelinePosition = useRef(0);
   const timelineRangeAnchor = useRef<number | null>(null);
@@ -115,6 +118,27 @@ export function App() {
     const activeElement = document.activeElement;
     if (activeElement === document.body || activeElement === openButton.current) filmstrip.current?.focus();
   }, [timelineThumbnails]);
+
+  const keepPlayheadInView = useCallback(() => {
+    const scroller = timelineScroller.current;
+    const marker = playhead.current;
+    if (!scroller || !marker) return;
+
+    const viewportBounds = scroller.getBoundingClientRect();
+    const playheadBounds = marker.getBoundingClientRect();
+    const adjustment = scrollAdjustmentToReveal(
+      viewportBounds.left,
+      viewportBounds.right,
+      playheadBounds.left,
+      playheadBounds.right,
+      Math.min(48, scroller.clientWidth / 4),
+    );
+    if (adjustment !== 0) scroller.scrollLeft += adjustment;
+  }, []);
+
+  useLayoutEffect(() => {
+    keepPlayheadInView();
+  }, [keepPlayheadInView, timelinePosition, timelineThumbnails]);
 
   useEffect(() => {
     if (!video) {
@@ -224,11 +248,12 @@ export function App() {
       element.currentTime = rationalSeconds(playbackFrame.playbackTimestamp);
       requestedTimelinePosition.current = playbackPosition;
       setTimelinePosition(playbackPosition);
+      keepPlayheadInView();
       await element.play();
     } catch (caught) {
       setError(errorMessage(caught));
     }
-  }, [busy, video]);
+  }, [busy, keepPlayheadInView, video]);
 
   useEffect(() => {
     const element = videoElement.current;
@@ -568,6 +593,7 @@ export function App() {
           </div>
         </header>
         <div
+          ref={timelineScroller}
           className="timeline"
           onWheel={(event) => {
             if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
@@ -638,7 +664,7 @@ export function App() {
                   aria-hidden="true"
                 />
               ) : null}
-              <div className="timeline-playhead" style={{ left: `${playheadPercent}%` }} aria-hidden="true" />
+              <div ref={playhead} className="timeline-playhead" style={{ left: `${playheadPercent}%` }} aria-hidden="true" />
             </div>
           ) : (
             <p className="timeline-message">{timelineLoading ? "Loading filmstrip" : "Filmstrip unavailable"}</p>

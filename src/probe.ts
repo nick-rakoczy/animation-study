@@ -5,7 +5,7 @@ const SHOW_ENTRIES = [
   "stream=index,codec_name,width,height,pix_fmt,sample_aspect_ratio,display_aspect_ratio,avg_frame_rate,r_frame_rate,time_base,duration_ts,duration,nb_frames",
   "stream_tags=rotate",
   "stream_side_data=rotation",
-  "frame=best_effort_timestamp,duration,pkt_duration,pkt_dts,key_frame,pict_type",
+  "frame=best_effort_timestamp,pts,duration,pkt_duration,pkt_dts,key_frame,pict_type",
   "format=format_name,duration",
 ].join(":");
 
@@ -18,6 +18,7 @@ export async function probeVideo(
     ffprobeExecutable,
     [
       "-v", "error",
+      "-fflags", "+genpts",
       "-select_streams", "v:0",
       "-show_entries", SHOW_ENTRIES,
       "-show_streams",

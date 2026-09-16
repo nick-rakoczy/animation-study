@@ -48,10 +48,23 @@ test("filmstrip scrubbing maps pointer input to an exact playhead position", asy
 test("filmstrip scrolls horizontally without compressing thumbnails", async () => {
   const source = await readFile("renderer/src/App.tsx", "utf8");
   const styles = await readFile("renderer/src/styles.css", "utf8");
+  const filmstripRule = styles.match(/\.filmstrip \{(?<rule>[^}]*)\}/s)?.groups?.rule;
+  assert.ok(filmstripRule);
   assert.match(source, /scrollLeft \+= event\.deltaY/);
   assert.match(styles, /overflow-x:\s*auto/);
-  assert.match(styles, /width:\s*max-content/);
+  assert.match(filmstripRule, /width:\s*max-content/);
+  assert.doesNotMatch(filmstripRule, /justify-content:\s*space-between/);
+  assert.doesNotMatch(filmstripRule, /min-width:\s*100%/);
   assert.match(styles, /flex:\s*0 0 auto/);
+});
+
+test("timeline scroll follows the playhead", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  assert.match(source, /ref=\{timelineScroller\}/);
+  assert.match(source, /ref=\{playhead\}/);
+  assert.match(source, /scrollAdjustmentToReveal/);
+  assert.match(source, /scroller\.scrollLeft \+= adjustment/);
+  assert.match(source, /\[keepPlayheadInView, timelinePosition, timelineThumbnails\]/);
 });
 
 test("timeline scale controls and shortcuts change sample density", async () => {

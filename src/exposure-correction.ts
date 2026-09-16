@@ -53,7 +53,13 @@ export function applyExposureCorrection(
     );
     if (!boundaryExists) throw new Error("The selected frame has no uncertain boundary before it");
     const withoutReview = removeReviewBoundary(timeline, action.timelinePosition);
-    return action.type === "confirm-same"
+    const boundaryIsSplit = withoutReview.spans[spanIndex]!.startTimelinePosition === action.timelinePosition;
+    if (action.type === "confirm-same") {
+      return boundaryIsSplit
+        ? mergeAtIndex(withoutReview, spanIndex - 1)
+        : withoutReview;
+    }
+    return boundaryIsSplit
       ? withoutReview
       : splitAtPosition(withoutReview, action.timelinePosition);
   }
@@ -65,8 +71,12 @@ export function applyExposureCorrection(
   }
 
   const leftIndex = action.type === "merge-previous" ? spanIndex - 1 : spanIndex;
+  return mergeAtIndex(timeline, leftIndex);
+}
+
+function mergeAtIndex(timeline: ExposureTimeline, leftIndex: number): ExposureTimeline {
   if (leftIndex < 0 || leftIndex >= timeline.spans.length - 1) {
-    throw new Error(`Cannot ${action.type.replace("-", " ")} at the file boundary`);
+    throw new Error("Cannot merge exposures at the file boundary");
   }
   const left = timeline.spans[leftIndex]!;
   const right = timeline.spans[leftIndex + 1]!;
