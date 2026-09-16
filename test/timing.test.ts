@@ -33,7 +33,7 @@ test("sorts decoded frames into presentation order while retaining decode indice
 test("preserves variable durations and infers missing packet durations from timestamps", () => {
   const result = normalizeTiming(probeWithFrames([
     { best_effort_timestamp: 0, pkt_duration: 40 },
-    { best_effort_timestamp: 40 },
+    { best_effort_timestamp: 40, pkt_duration: 40 },
     { best_effort_timestamp: 100, pkt_duration: 20 },
   ], "1/1000", "0/0"));
 
@@ -43,6 +43,7 @@ test("preserves variable durations and infers missing packet durations from time
     { numerator: "1", denominator: "50" },
   ]);
   assert.equal(result.frames[1]!.durationSource, "next-timestamp");
+  assert.equal(result.frames[1]!.presentationDurationTicks, "60");
 });
 
 test("accepts the frame duration field emitted by FFmpeg 9", () => {

@@ -123,20 +123,28 @@ export function normalizeTiming(raw: RawProbe): NormalizedTiming {
     const next = ordered[timelinePosition + 1];
     // FFmpeg 9 reports this as `duration`; older releases used `pkt_duration`.
     const packetDurationTicks = parsePositiveTicks(current.raw.duration ?? current.raw.pkt_duration);
+    const timestampDurationTicks = next && next.timestampTicks > current.timestampTicks
+      ? next.timestampTicks - current.timestampTicks
+      : null;
     let presentationDuration: Rational;
+    let presentationDurationTicks: bigint | null;
     let durationSource: SourceFrameTiming["durationSource"];
 
-    if (packetDurationTicks !== null) {
+    if (timestampDurationTicks !== null) {
+      presentationDuration = rationalFromTicks(timestampDurationTicks, timeBase);
+      presentationDurationTicks = timestampDurationTicks;
+      durationSource = packetDurationTicks === timestampDurationTicks ? "packet" : "next-timestamp";
+    } else if (packetDurationTicks !== null) {
       presentationDuration = rationalFromTicks(packetDurationTicks, timeBase);
+      presentationDurationTicks = packetDurationTicks;
       durationSource = "packet";
-    } else if (next && compareRationals(next.timestamp, current.timestamp) > 0) {
-      presentationDuration = subtractRationals(next.timestamp, current.timestamp);
-      durationSource = "next-timestamp";
     } else if (nominalDuration) {
       presentationDuration = nominalDuration;
+      presentationDurationTicks = null;
       durationSource = "nominal-rate";
     } else if (frames.length > 0) {
       presentationDuration = frames[frames.length - 1]!.presentationDuration;
+      presentationDurationTicks = null;
       durationSource = "previous-frame";
     } else {
       throw new Error("Cannot determine the duration of the only decoded frame");
@@ -150,7 +158,7 @@ export function normalizeTiming(raw: RawProbe): NormalizedTiming {
       presentationTimestamp: current.timestamp,
       presentationDuration,
       presentationTimestampTicks: current.timestampTicks.toString(),
-      presentationDurationTicks: packetDurationTicks?.toString() ?? null,
+      presentationDurationTicks: presentationDurationTicks?.toString() ?? null,
       keyFrame: current.raw.key_frame === 1,
       pictureType: current.raw.pict_type ?? null,
       durationSource,
