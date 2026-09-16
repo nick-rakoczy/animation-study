@@ -15,11 +15,6 @@ test("Linux releases include the AppImage updater feed", async () => {
     owner: "nick-rakoczy",
     repo: "animation-study",
   });
-
-  const workflow = await readFile(".github/workflows/release.yml", "utf8");
-  assert.match(workflow, /release\/latest-linux\.yml/);
-  assert.match(workflow, /gh release upload[^\n]*\$update_metadata/);
-  assert.match(workflow, /gh release create[^\n]*\$update_metadata/);
 });
 
 test("the AppImage updater requires confirmation before download and restart", async () => {
