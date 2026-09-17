@@ -26,7 +26,6 @@ export function App() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineScaleIndex, setTimelineScaleIndex] = useState(defaultTimelineScaleIndex);
   const [timelineRange, setTimelineRange] = useState<InclusiveTimelineRange | null>(null);
-  const [rangeSelectionMode, setRangeSelectionMode] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +37,8 @@ export function App() {
   const focusTimelineWhenReady = useRef(false);
   const requestedTimelinePosition = useRef(0);
   const timelineRangeAnchor = useRef<number | null>(null);
+  const timelineRangeDragStartX = useRef<number | null>(null);
+  const timelineRangeDragging = useRef(false);
 
   useEffect(() => {
     void window.animationStudy.getMediaToolStatus().then(setTools);
@@ -60,8 +61,9 @@ export function App() {
         setTimelineScaleIndex(defaultTimelineScaleIndex);
         setTimelineRange(null);
         setExportStatus(null);
-        setRangeSelectionMode(false);
         timelineRangeAnchor.current = null;
+        timelineRangeDragStartX.current = null;
+        timelineRangeDragging.current = false;
         setPlaying(false);
         focusTimelineWhenReady.current = true;
       }
@@ -194,11 +196,11 @@ export function App() {
     return timelinePositionFromOffset(clientX - bounds.left, bounds.width, video.playbackFrames.length);
   }, [video]);
 
-  const moveTimelinePointer = useCallback((clientX: number, element: HTMLDivElement) => {
+  const moveTimelinePointer = useCallback((clientX: number, element: HTMLDivElement, selectRange: boolean) => {
     if (!video) return;
     const position = timelinePositionForPointer(clientX, element);
     if (position === null) return;
-    if (timelineRangeAnchor.current !== null) {
+    if (selectRange && timelineRangeAnchor.current !== null) {
       setTimelineRange(createInclusiveTimelineRange(
         timelineRangeAnchor.current,
         position,
@@ -565,12 +567,6 @@ export function App() {
               <button onClick={() => void window.animationStudy.cancelExport()}>Cancel export</button>
             ) : null}
             <button
-              title="Select a range with pointer drag, or hold Shift while dragging"
-              aria-pressed={rangeSelectionMode}
-              disabled={!video}
-              onClick={() => setRangeSelectionMode((active) => !active)}
-            >Select range</button>
-            <button
               aria-label="Clear timeline range"
               disabled={!timelineRange}
               onClick={() => setTimelineRange(null)}
@@ -606,7 +602,8 @@ export function App() {
           timelineThumbnails.length > 0 ? (
             <div
               ref={filmstrip}
-              className={rangeSelectionMode ? "filmstrip selecting-range" : "filmstrip"}
+              className="filmstrip"
+              title="Click to seek. Drag to select a frame range."
               role="slider"
               aria-label="Timeline playhead"
               aria-valuemin={1}
@@ -620,29 +617,35 @@ export function App() {
                 event.currentTarget.setPointerCapture(event.pointerId);
                 const position = timelinePositionForPointer(event.clientX, event.currentTarget);
                 if (position === null) return;
-                if (rangeSelectionMode || event.shiftKey) {
-                  timelineRangeAnchor.current = position;
-                  setTimelineRange(createInclusiveTimelineRange(position, position, video.playbackFrames.length));
-                } else {
-                  timelineRangeAnchor.current = null;
-                }
+                timelineRangeAnchor.current = position;
+                timelineRangeDragStartX.current = event.clientX;
+                timelineRangeDragging.current = false;
                 showFrame(position);
               }}
               onPointerMove={(event) => {
                 if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                  moveTimelinePointer(event.clientX, event.currentTarget);
+                  const dragStartX = timelineRangeDragStartX.current;
+                  if (dragStartX !== null && Math.abs(event.clientX - dragStartX) >= 3) {
+                    timelineRangeDragging.current = true;
+                  }
+                  moveTimelinePointer(event.clientX, event.currentTarget, timelineRangeDragging.current);
                 }
               }}
               onPointerUp={(event) => {
-                moveTimelinePointer(event.clientX, event.currentTarget);
-                const selectedRange = timelineRangeAnchor.current !== null;
+                const dragStartX = timelineRangeDragStartX.current;
+                if (dragStartX !== null && Math.abs(event.clientX - dragStartX) >= 3) {
+                  timelineRangeDragging.current = true;
+                }
+                moveTimelinePointer(event.clientX, event.currentTarget, timelineRangeDragging.current);
                 timelineRangeAnchor.current = null;
-                if (selectedRange) setRangeSelectionMode(false);
+                timelineRangeDragStartX.current = null;
+                timelineRangeDragging.current = false;
                 event.currentTarget.releasePointerCapture(event.pointerId);
               }}
               onPointerCancel={() => {
                 timelineRangeAnchor.current = null;
-                setRangeSelectionMode(false);
+                timelineRangeDragStartX.current = null;
+                timelineRangeDragging.current = false;
               }}
             >
               {timelineThumbnails.map((thumbnail) => (

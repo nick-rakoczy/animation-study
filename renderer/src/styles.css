@@ -108,12 +108,6 @@ button:disabled {
   text-transform: none;
 }
 
-.timeline-range-controls button[aria-pressed="true"] {
-  color: #191510;
-  border-color: #e4a853;
-  background: #e4a853;
-}
-
 .export-status {
   color: #aeb0b4;
   font-size: 11px;
@@ -149,7 +143,7 @@ button:disabled {
   gap: 4px;
   width: max-content;
   height: 100%;
-  cursor: ew-resize;
+  cursor: crosshair;
   touch-action: none;
   user-select: none;
 }
@@ -157,10 +151,6 @@ button:disabled {
 .filmstrip:focus-visible {
   outline: 2px solid #e4a853;
   outline-offset: 2px;
-}
-
-.filmstrip.selecting-range {
-  cursor: crosshair;
 }
 
 .timeline-range-selection {

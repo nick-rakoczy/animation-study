@@ -93,8 +93,11 @@ test("timeline scale controls and shortcuts change sample density", async () => 
 test("timeline supports inclusive pointer range selection", async () => {
   const source = await readFile("renderer/src/App.tsx", "utf8");
   assert.match(source, /createInclusiveTimelineRange/);
-  assert.match(source, /aria-pressed=\{rangeSelectionMode\}/);
-  assert.match(source, /rangeSelectionMode \|\| event\.shiftKey/);
+  assert.match(source, /timelineRangeAnchor\.current = position/);
+  assert.match(source, /Math\.abs\(event\.clientX - dragStartX\) >= 3/);
+  assert.match(source, /moveTimelinePointer\(event\.clientX, event\.currentTarget, timelineRangeDragging\.current\)/);
+  assert.doesNotMatch(source, /rangeSelectionMode/);
+  assert.doesNotMatch(source, />Select range<\/button>/);
   assert.match(source, /className="timeline-range-selection"/);
   assert.match(source, /Clear timeline range/);
 });
