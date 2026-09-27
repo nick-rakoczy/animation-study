@@ -151,6 +151,22 @@ test("frame stepping seeks the playback proxy without requesting display PNGs", 
   assert.doesNotMatch(source, /imageDataUrl.*Source frame/);
 });
 
+test("playback loops inside the selected range or the full video", async () => {
+  const source = await readFile("renderer/src/App.tsx", "utf8");
+  const styles = await readFile("renderer/src/styles.css", "utf8");
+  assert.match(source, /timelineRange \?\? createInclusiveTimelineRange/);
+  assert.match(source, /playbackRangeTimes\(video\.playbackFrames, playbackRange\)/);
+  assert.match(source, /metadata\.mediaTime >= rangeTimes\.endTimeSeconds/);
+  assert.match(source, /prepareLoopVideo\(standby, startTimeSeconds\)/);
+  assert.match(source, /swapLoopPlayback\(element\)/);
+  assert.match(source, /activeVideoIndex\.current = incomingIndex/);
+  assert.match(source, /incoming\.play\(\)/);
+  assert.match(source, /requestedPosition < playbackRange\.startPosition/);
+  assert.match(source, /requestedPosition >= playbackRange\.endPosition/);
+  assert.match(source, /\(\[0, 1\] as const\)\.map/);
+  assert.match(styles, /\.video-viewport video\.active/);
+});
+
 test("renderer reports background analysis without blocking controls", async () => {
   const source = await readFile("renderer/src/App.tsx", "utf8");
   assert.match(source, /getBackgroundAnalysisStatus/);

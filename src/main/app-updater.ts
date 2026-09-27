@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, shell } from "electron";
 import electronUpdater from "electron-updater";
+import { registerAppImageDesktopEntry } from "./linux-desktop-entry.js";
 
 const { autoUpdater } = electronUpdater;
 const latestReleasePage = "https://github.com/nick-rakoczy/animation-study/releases/latest";
@@ -10,6 +11,16 @@ export function startAppImageUpdater(window: BrowserWindow): void {
 
   let downloadStarted = false;
   let errorShown = false;
+  let downloadedVersion: string | null = null;
+
+  autoUpdater.on("appimage-filename-updated", (destination: string) => {
+    if (!downloadedVersion) return;
+    try {
+      registerAppImageDesktopEntry(destination, downloadedVersion);
+    } catch (error) {
+      console.warn("Could not update the Animation Study application menu entry", error);
+    }
+  });
 
   const reportUpdateError = (error: unknown) => {
     clearDownloadProgress(window);
@@ -63,6 +74,7 @@ export function startAppImageUpdater(window: BrowserWindow): void {
   });
 
   autoUpdater.on("update-downloaded", (update) => {
+    downloadedVersion = update.version;
     clearDownloadProgress(window);
     void (async () => {
       if (window.isDestroyed()) return;

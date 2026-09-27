@@ -141,7 +141,7 @@ test("probes a real 24000/1001 video and creates a contact sheet", async (contex
   await playback.clear();
 });
 
-test("bounds the playback proxy keyframe interval for responsive seeking", async (context) => {
+test("makes every playback proxy frame independently seekable", async (context) => {
   try {
     await execFileAsync("ffmpeg", ["-version"]);
     await execFileAsync("ffprobe", ["-version"]);
@@ -188,6 +188,7 @@ test("bounds the playback proxy keyframe interval for responsive seeking", async
     .filter((position): position is number => position !== null);
 
   assert.equal(frames.length, timing.frameCount);
+  assert.equal(keyframePositions.length, frames.length);
   assert.equal(keyframePositions[0], 0);
   for (let index = 1; index < keyframePositions.length; index += 1) {
     assert.ok(

@@ -1,7 +1,10 @@
 import { join } from "node:path";
+import { spawn } from "node:child_process";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { ApplicationService } from "./application-service.js";
 import { startAppImageUpdater } from "./app-updater.js";
+import { registerAppImageDesktopEntry } from "./linux-desktop-entry.js";
+import { ensureAppImageInstalled } from "./appimage-installation.js";
 import { getMediaToolStatus } from "../media-tools.js";
 import { findAvailableUpdate } from "../release-update.js";
 
@@ -50,7 +53,34 @@ async function offerAvailableUpdate(window: BrowserWindow): Promise<void> {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (app.isPackaged && process.env.APPIMAGE) {
+    try {
+      const installation = ensureAppImageInstalled(process.env.APPIMAGE, app.getVersion());
+      if (installation.copied) {
+        process.env.APPIMAGE = installation.path;
+        const child = spawn(installation.path, process.argv.slice(1), {
+          detached: true,
+          stdio: "ignore",
+          env: { ...process.env, APPIMAGE: installation.path },
+        });
+        await new Promise<void>((resolve, reject) => {
+          child.once("spawn", resolve);
+          child.once("error", reject);
+        });
+        child.unref();
+        app.quit();
+        return;
+      }
+    } catch (error) {
+      console.warn("Could not install Animation Study in ~/Applications", error);
+      dialog.showErrorBox(
+        "AppImage installation failed",
+        "Animation Study could not install or start its copy in ~/Applications. It will continue in this window.",
+      );
+    }
+  }
+
   service = new ApplicationService(join(app.getPath("userData"), "frame-cache"));
   ipcMain.handle("media:get-tool-status", () => getMediaToolStatus());
   ipcMain.handle("media:open-video", async () => {
@@ -90,8 +120,14 @@ app.whenReady().then(() => {
   ipcMain.handle("media:clear-unused-cache", () => service.clearUnusedCache());
 
   const window = createWindow();
-  if (app.isPackaged && process.env.APPIMAGE) startAppImageUpdater(window);
-  else void offerAvailableUpdate(window);
+  if (app.isPackaged && process.env.APPIMAGE) {
+    try {
+      registerAppImageDesktopEntry(process.env.APPIMAGE, app.getVersion());
+    } catch (error) {
+      console.warn("Could not register Animation Study in the application menu", error);
+    }
+    startAppImageUpdater(window);
+  } else void offerAvailableUpdate(window);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

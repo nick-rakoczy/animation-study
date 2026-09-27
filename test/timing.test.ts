@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chooseSamplePositions } from "../src/contact-sheet.js";
 import { rationalToDecimal } from "../src/rational.js";
-import { createPlaybackFrames, playbackSeekTime, timelinePositionAtPlaybackTime } from "../src/playback.js";
+import { createPlaybackFrames, playbackRangeTimes, playbackSeekTime, timelinePositionAtPlaybackTime } from "../src/playback.js";
 import { normalizeTiming, type RawProbe } from "../src/timing.js";
 
 test("maps constant-rate frames to zero-based positions and exact rational timing", () => {
@@ -123,6 +123,32 @@ test("seeks inside an indexed playback frame instead of on its timestamp boundar
   for (const frame of frames) {
     assert.equal(timelinePositionAtPlaybackTime(frames, playbackSeekTime(frame)), frame.timelinePosition);
   }
+});
+
+test("finds exact playback boundaries for an inclusive timeline range", () => {
+  const timing = normalizeTiming(probeWithFrames([
+    { best_effort_timestamp: 0, pkt_duration: 20 },
+    { best_effort_timestamp: 20, pkt_duration: 80 },
+    { best_effort_timestamp: 100, pkt_duration: 30 },
+  ], "1/1000", "0/0"));
+  const frames = createPlaybackFrames(timing);
+
+  assert.deepEqual(playbackRangeTimes(frames, {
+    startPosition: 1,
+    endPosition: 1,
+    frameCount: 1,
+  }), {
+    startTimeSeconds: 0.02,
+    endTimeSeconds: 0.1,
+  });
+  assert.deepEqual(playbackRangeTimes(frames, {
+    startPosition: 1,
+    endPosition: 2,
+    frameCount: 2,
+  }), {
+    startTimeSeconds: 0.02,
+    endTimeSeconds: 0.13,
+  });
 });
 
 function probeWithFrames(

@@ -4,7 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { runProcess } from "./process.js";
 import type { NormalizedTiming } from "./timing.js";
 
-export const playbackKeyframeInterval = 12;
+export const playbackKeyframeInterval = 1;
 const playbackProxyVersion = `vp9-seekable-g${playbackKeyframeInterval}-v1`;
 
 export interface PlaybackProxyOptions {

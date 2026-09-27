@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { BackgroundAnalysisStatus, CelInformation, CorrectionInformation, MediaToolStatus, OpenVideoResult, TimelineThumbnail } from "../../src/app-contract.js";
 import type { AnalysisJobStage } from "../../src/analysis-job.js";
 import type { ExposureCorrectionAction } from "../../src/exposure-correction.js";
 import { appKeyboardAction } from "../../src/keyboard-shortcuts.js";
-import { playbackSeekTime, timelinePositionAtPlaybackTime } from "../../src/playback.js";
+import { playbackRangeTimes, playbackSeekTime, timelinePositionAtPlaybackTime } from "../../src/playback.js";
 import { createInclusiveTimelineRange, timelineRangeFractions, type InclusiveTimelineRange } from "../../src/timeline-range.js";
 import { defaultTimelineScaleIndex, nextTimelineScaleIndex, timelineSampleCounts } from "../../src/timeline-scale.js";
 import { scrollAdjustmentToReveal } from "../../src/timeline-scroll.js";
 import { timelinePositionFromOffset } from "../../src/timeline-scrub.js";
+
+type PlaybackElementIndex = 0 | 1;
 
 export function App() {
   const [tools, setTools] = useState<MediaToolStatus | null>(null);
@@ -26,10 +28,13 @@ export function App() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineScaleIndex, setTimelineScaleIndex] = useState(defaultTimelineScaleIndex);
   const [timelineRange, setTimelineRange] = useState<InclusiveTimelineRange | null>(null);
+  const [visibleVideoIndex, setVisibleVideoIndex] = useState<PlaybackElementIndex>(0);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const videoElement = useRef<HTMLVideoElement>(null);
+  const firstVideoElement = useRef<HTMLVideoElement>(null);
+  const secondVideoElement = useRef<HTMLVideoElement>(null);
+  const activeVideoIndex = useRef<PlaybackElementIndex>(0);
   const openButton = useRef<HTMLButtonElement>(null);
   const timelineScroller = useRef<HTMLDivElement>(null);
   const filmstrip = useRef<HTMLDivElement>(null);
@@ -39,6 +44,18 @@ export function App() {
   const timelineRangeAnchor = useRef<number | null>(null);
   const timelineRangeDragStartX = useRef<number | null>(null);
   const timelineRangeDragging = useRef(false);
+
+  const videoElementAt = useCallback((index: PlaybackElementIndex) => (
+    index === 0 ? firstVideoElement.current : secondVideoElement.current
+  ), []);
+  const playbackRange = useMemo(() => {
+    if (!video) return null;
+    return timelineRange ?? createInclusiveTimelineRange(
+      0,
+      video.playbackFrames.length - 1,
+      video.playbackFrames.length,
+    );
+  }, [timelineRange, video]);
 
   useEffect(() => {
     void window.animationStudy.getMediaToolStatus().then(setTools);
@@ -60,6 +77,8 @@ export function App() {
         setTimelineThumbnails([]);
         setTimelineScaleIndex(defaultTimelineScaleIndex);
         setTimelineRange(null);
+        activeVideoIndex.current = 0;
+        setVisibleVideoIndex(0);
         setExportStatus(null);
         timelineRangeAnchor.current = null;
         timelineRangeDragStartX.current = null;
@@ -171,9 +190,10 @@ export function App() {
     const clamped = Math.max(0, Math.min(video.playbackFrames.length - 1, position));
     requestedTimelinePosition.current = clamped;
     setTimelinePosition(clamped);
-    const element = videoElement.current;
+    const element = videoElementAt(activeVideoIndex.current);
     const playbackFrame = video.playbackFrames[clamped];
     if (!element || !playbackFrame) return;
+    videoElementAt(activeVideoIndex.current === 0 ? 1 : 0)?.pause();
     element.pause();
     void (async () => {
       try {
@@ -184,7 +204,7 @@ export function App() {
         setError(errorMessage(caught));
       }
     })();
-  }, [video]);
+  }, [video, videoElementAt]);
 
   const stepFrame = useCallback((direction: -1 | 1) => {
     showFrame(requestedTimelinePosition.current + direction);
@@ -234,9 +254,50 @@ export function App() {
     }
   }, [showFrame, timelinePosition, video]);
 
+  useEffect(() => {
+    if (!video || !playbackRange) return;
+    const standbyIndex = activeVideoIndex.current === 0 ? 1 : 0;
+    const standby = videoElementAt(standbyIndex);
+    if (!standby) return;
+    const { startTimeSeconds } = playbackRangeTimes(video.playbackFrames, playbackRange);
+    void prepareLoopVideo(standby, startTimeSeconds).catch((caught) => setError(errorMessage(caught)));
+  }, [playbackRange, video, videoElementAt]);
+
+  const swapLoopPlayback = useCallback((outgoing: HTMLVideoElement) => {
+    if (!video || !playbackRange || outgoing !== videoElementAt(activeVideoIndex.current)) return false;
+    const incomingIndex: PlaybackElementIndex = activeVideoIndex.current === 0 ? 1 : 0;
+    const incoming = videoElementAt(incomingIndex);
+    if (!incoming) return false;
+
+    const { startTimeSeconds } = playbackRangeTimes(video.playbackFrames, playbackRange);
+    activeVideoIndex.current = incomingIndex;
+    incoming.muted = false;
+    outgoing.muted = true;
+    incoming.classList.add("active");
+    outgoing.classList.remove("active");
+    setVisibleVideoIndex(incomingIndex);
+    requestedTimelinePosition.current = playbackRange.startPosition;
+    setTimelinePosition(playbackRange.startPosition);
+
+    outgoing.pause();
+    void incoming.play().catch((caught) => {
+      setPlaying(false);
+      setError(errorMessage(caught));
+    });
+    void prepareLoopVideo(outgoing, startTimeSeconds).catch((caught) => setError(errorMessage(caught)));
+    return true;
+  }, [playbackRange, video, videoElementAt]);
+
   const togglePlayback = useCallback(async () => {
-    const element = videoElement.current;
-    const playbackPosition = element?.ended ? 0 : requestedTimelinePosition.current;
+    const element = videoElementAt(activeVideoIndex.current);
+    const requestedPosition = requestedTimelinePosition.current;
+    const playbackPosition = playbackRange && (
+      element?.ended
+      || requestedPosition < playbackRange.startPosition
+      || requestedPosition >= playbackRange.endPosition
+    )
+      ? playbackRange.startPosition
+      : element?.ended ? 0 : requestedPosition;
     const playbackFrame = video?.playbackFrames[playbackPosition];
     if (!element || !playbackFrame || busy) return;
     if (!element.paused) {
@@ -247,6 +308,14 @@ export function App() {
     setError(null);
     try {
       await waitForMetadata(element);
+      if (playbackRange) {
+        const standbyIndex = activeVideoIndex.current === 0 ? 1 : 0;
+        const standby = videoElementAt(standbyIndex);
+        if (standby) {
+          const { startTimeSeconds } = playbackRangeTimes(video.playbackFrames, playbackRange);
+          await prepareLoopVideo(standby, startTimeSeconds);
+        }
+      }
       element.currentTime = rationalSeconds(playbackFrame.playbackTimestamp);
       requestedTimelinePosition.current = playbackPosition;
       setTimelinePosition(playbackPosition);
@@ -255,13 +324,23 @@ export function App() {
     } catch (caught) {
       setError(errorMessage(caught));
     }
-  }, [busy, keepPlayheadInView, video]);
+  }, [busy, keepPlayheadInView, playbackRange, video, videoElementAt]);
 
   useEffect(() => {
-    const element = videoElement.current;
+    const element = videoElementAt(activeVideoIndex.current);
     if (!element || !video || !playing) return;
+    const rangeTimes = playbackRange ? playbackRangeTimes(video.playbackFrames, playbackRange) : null;
     let callbackId = 0;
     const updatePosition: VideoFrameRequestCallback = (_now, metadata) => {
+      if (rangeTimes && playbackRange && metadata.mediaTime >= rangeTimes.endTimeSeconds) {
+        if (!swapLoopPlayback(element)) {
+          element.currentTime = rangeTimes.startTimeSeconds;
+          requestedTimelinePosition.current = playbackRange.startPosition;
+          setTimelinePosition(playbackRange.startPosition);
+          callbackId = element.requestVideoFrameCallback(updatePosition);
+        }
+        return;
+      }
       const position = timelinePositionAtPlaybackTime(video.playbackFrames, metadata.mediaTime);
       requestedTimelinePosition.current = position;
       setTimelinePosition(position);
@@ -269,7 +348,7 @@ export function App() {
     };
     callbackId = element.requestVideoFrameCallback(updatePosition);
     return () => element.cancelVideoFrameCallback(callbackId);
-  }, [playing, video]);
+  }, [playbackRange, playing, swapLoopPlayback, video, videoElementAt, visibleVideoIndex]);
 
   useEffect(() => {
     if (!video) {
@@ -455,21 +534,38 @@ export function App() {
         <div className="viewer" aria-busy={busy}>
           {video ? (
             <div className="video-viewport">
-              <video
-                ref={videoElement}
-                className="source-video"
-                src={video.playbackUrl}
-                preload="auto"
-                playsInline
-                onPlay={() => setPlaying(true)}
-                onPause={() => setPlaying(false)}
-                onEnded={() => {
-                  setPlaying(false);
-                  requestedTimelinePosition.current = video.playbackFrames.length - 1;
-                  setTimelinePosition(video.playbackFrames.length - 1);
-                }}
-                onError={() => setError("The source could not be played by the embedded media decoder")}
-              />
+              {([0, 1] as const).map((index) => (
+                <video
+                  key={index}
+                  ref={index === 0 ? firstVideoElement : secondVideoElement}
+                  className={index === visibleVideoIndex ? "source-video active" : "source-video"}
+                  src={video.playbackUrl}
+                  preload="auto"
+                  playsInline
+                  muted={index !== visibleVideoIndex}
+                  onPlay={(event) => {
+                    if (event.currentTarget === videoElementAt(activeVideoIndex.current)) setPlaying(true);
+                  }}
+                  onPause={(event) => {
+                    if (event.currentTarget === videoElementAt(activeVideoIndex.current)) setPlaying(false);
+                  }}
+                  onEnded={(event) => {
+                    if (swapLoopPlayback(event.currentTarget)) return;
+                    if (playbackRange) {
+                      const { startTimeSeconds } = playbackRangeTimes(video.playbackFrames, playbackRange);
+                      event.currentTarget.currentTime = startTimeSeconds;
+                      requestedTimelinePosition.current = playbackRange.startPosition;
+                      setTimelinePosition(playbackRange.startPosition);
+                      void event.currentTarget.play().catch((caught) => setError(errorMessage(caught)));
+                      return;
+                    }
+                    setPlaying(false);
+                    requestedTimelinePosition.current = video.playbackFrames.length - 1;
+                    setTimelinePosition(video.playbackFrames.length - 1);
+                  }}
+                  onError={() => setError("The source could not be played by the embedded media decoder")}
+                />
+              ))}
             </div>
           ) : (
             <div className="empty-state">
@@ -729,6 +825,32 @@ function waitForMetadata(element: HTMLVideoElement): Promise<void> {
   return new Promise((resolve, reject) => {
     element.addEventListener("loadedmetadata", () => resolve(), { once: true });
     element.addEventListener("error", () => reject(new Error("The source media metadata could not be loaded")), { once: true });
+  });
+}
+
+async function prepareLoopVideo(element: HTMLVideoElement, timeSeconds: number): Promise<void> {
+  await waitForMetadata(element);
+  element.pause();
+  if (
+    Math.abs(element.currentTime - timeSeconds) < 0.000_001
+    && element.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+  ) return;
+
+  await new Promise<void>((resolve, reject) => {
+    const finish = () => {
+      element.removeEventListener("seeked", finish);
+      element.removeEventListener("error", fail);
+      resolve();
+    };
+    const fail = () => {
+      element.removeEventListener("seeked", finish);
+      element.removeEventListener("error", fail);
+      reject(new Error("The playback loop could not buffer its starting frame"));
+    };
+    element.addEventListener("seeked", finish);
+    element.addEventListener("error", fail);
+    element.currentTime = timeSeconds;
+    if (!element.seeking) finish();
   });
 }
 
