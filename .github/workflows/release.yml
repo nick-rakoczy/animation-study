@@ -33,10 +33,10 @@ jobs:
       - name: Set up npm
         run: npm install --global npm@12
 
-      - name: Install FFmpeg and Wine
+      - name: Install FFmpeg, Wine, and Xvfb
         run: |
           sudo apt-get update
-          sudo apt-get install --yes ffmpeg wine
+          sudo apt-get install --yes ffmpeg wine xvfb xauth
 
       - name: Install dependencies
         run: npm ci
@@ -80,7 +80,7 @@ jobs:
         run: npm run dist:linux
 
       - name: Build Windows installer
-        run: npm run dist:win
+        run: xvfb-run -a npm run dist:win
 
       - name: Publish GitHub release
         env:

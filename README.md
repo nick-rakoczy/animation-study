@@ -66,6 +66,8 @@ npm run dist:win
 
 This creates `release/Animation-Study-<version>-win-x64-Setup.exe`, its `.blockmap`, and `release/latest.yml`. The Windows installer requires `ffmpeg` and `ffprobe` on the user's `PATH` as described in the [FFmpeg installation instructions](docs/FFMPEG_INSTALLATION.md). The release workflow builds the installer on Ubuntu and uploads it with the AppImage and both update metadata files. Linux tests and cross-building do not verify the app on Windows.
 
+On a headless Linux builder, run `xvfb-run -a npm run dist:win`. electron-builder uses Wine to generate the NSIS uninstaller and needs a virtual display for that packaging step.
+
 Pushes to `main` start the release workflow. Each successful run reads the major and minor numbers from `package.json`, finds the highest existing patch tag for that release line, and increments it. If the release line has no tags, it starts at patch `0`. To begin a new major or minor release line, update the version in `package.json`; the checked-in patch number is ignored by the workflow.
 
 AppImage normally uses FUSE. On a system without FUSE, run it with `APPIMAGE_EXTRACT_AND_RUN=1` or use `--appimage-extract` and start the extracted `AppRun` file.
