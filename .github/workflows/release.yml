@@ -15,8 +15,8 @@ permissions:
 jobs:
   build-test-publish:
     name: Build, test, and publish Linux and Windows installers
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -33,10 +33,14 @@ jobs:
       - name: Set up npm
         run: npm install --global npm@12
 
-      - name: Install FFmpeg, Wine, and Xvfb
+      - name: Install FFmpeg, 32-bit Wine, and Xvfb
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install --yes ffmpeg wine xvfb xauth
+          sudo apt-get install --yes --no-install-recommends ffmpeg wine wine64 wine32:i386 xvfb xauth
+
+      - name: Verify 32-bit Wine
+        run: xvfb-run -a wine 'C:\windows\syswow64\cmd.exe' /c ver
 
       - name: Install dependencies
         run: npm ci
