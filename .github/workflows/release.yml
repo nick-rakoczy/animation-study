@@ -1,4 +1,4 @@
-name: Linux release
+name: Linux and Windows release
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 concurrency:
-  group: linux-release-main
+  group: release-main
   cancel-in-progress: false
 
 permissions:
@@ -14,9 +14,9 @@ permissions:
 
 jobs:
   build-test-publish:
-    name: Build, test, and publish AppImage
+    name: Build, test, and publish Linux and Windows installers
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
@@ -33,10 +33,10 @@ jobs:
       - name: Set up npm
         run: npm install --global npm@12
 
-      - name: Install FFmpeg
+      - name: Install FFmpeg and Wine
         run: |
           sudo apt-get update
-          sudo apt-get install --yes ffmpeg
+          sudo apt-get install --yes ffmpeg wine
 
       - name: Install dependencies
         run: npm ci
@@ -79,25 +79,43 @@ jobs:
       - name: Build AppImage
         run: npm run dist:linux
 
+      - name: Build Windows installer
+        run: npm run dist:win
+
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           appimage="release/Animation-Study-${RELEASE_VERSION}-x86_64.AppImage"
-          update_metadata="release/latest-linux.yml"
+          linux_update_metadata="release/latest-linux.yml"
+          windows_installer="release/Animation-Study-${RELEASE_VERSION}-win-x64-Setup.exe"
+          windows_blockmap="${windows_installer}.blockmap"
+          windows_update_metadata="release/latest.yml"
           if [ ! -f "$appimage" ]; then
             echo "Expected AppImage was not produced: $appimage" >&2
             exit 1
           fi
-          if [ ! -f "$update_metadata" ]; then
-            echo "Expected update metadata was not produced: $update_metadata" >&2
+          if [ ! -f "$linux_update_metadata" ]; then
+            echo "Expected Linux update metadata was not produced: $linux_update_metadata" >&2
+            exit 1
+          fi
+          if [ ! -f "$windows_installer" ]; then
+            echo "Expected Windows installer was not produced: $windows_installer" >&2
+            exit 1
+          fi
+          if [ ! -f "$windows_blockmap" ]; then
+            echo "Expected Windows blockmap was not produced: $windows_blockmap" >&2
+            exit 1
+          fi
+          if [ ! -f "$windows_update_metadata" ]; then
+            echo "Expected Windows update metadata was not produced: $windows_update_metadata" >&2
             exit 1
           fi
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "$appimage" "$update_metadata" --clobber
+            gh release upload "$RELEASE_TAG" "$appimage" "$linux_update_metadata" "$windows_installer" "$windows_blockmap" "$windows_update_metadata" --clobber
           else
-            gh release create "$RELEASE_TAG" "$appimage" "$update_metadata" \
+            gh release create "$RELEASE_TAG" "$appimage" "$linux_update_metadata" "$windows_installer" "$windows_blockmap" "$windows_update_metadata" \
               --generate-notes \
               --target "$GITHUB_SHA" \
               --title "$RELEASE_TAG"

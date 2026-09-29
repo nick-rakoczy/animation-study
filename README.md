@@ -54,7 +54,17 @@ chmod +x Animation-Study-0.1.0-x86_64.AppImage
 
 On first launch, the AppImage copies itself to `~/Applications` and restarts from there. You can delete the original download after the app opens. It creates `com.animationstudy.app.desktop` in `$XDG_DATA_HOME/applications` (or `~/.local/share/applications`), pointing to the copy in `~/Applications`. The built-in updater keeps the desktop entry pointed at the current version.
 
-The build also creates `release/latest-linux.yml`. GitHub releases must include that file with the AppImage so packaged copies can find, verify, and install updates. The release workflow uploads both files.
+The build also creates `release/latest-linux.yml`. GitHub releases must include that file with the AppImage so packaged copies can find, verify, and install updates.
+
+## Build the Windows release on Linux
+
+Install Wine, then run:
+
+```sh
+npm run dist:win
+```
+
+This creates `release/Animation-Study-<version>-win-x64-Setup.exe`, its `.blockmap`, and `release/latest.yml`. The Windows installer requires `ffmpeg` and `ffprobe` on the user's `PATH` as described in the [FFmpeg installation instructions](docs/FFMPEG_INSTALLATION.md). The release workflow builds the installer on Ubuntu and uploads it with the AppImage and both update metadata files. Linux tests and cross-building do not verify the app on Windows.
 
 Pushes to `main` start the release workflow. Each successful run reads the major and minor numbers from `package.json`, finds the highest existing patch tag for that release line, and increments it. If the release line has no tags, it starts at patch `0`. To begin a new major or minor release line, update the version in `package.json`; the checked-in patch number is ignored by the workflow.
 
