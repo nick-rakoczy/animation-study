@@ -54,6 +54,20 @@ button:disabled {
   background: #17181b;
 }
 
+.file-drop-overlay {
+  position: fixed;
+  inset: 8px;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  border: 2px dashed #e4a853;
+  border-radius: 8px;
+  background: #17181be6;
+  color: #e8e8e6;
+  font-size: 24px;
+  pointer-events: none;
+}
+
 .timeline-panel {
   display: grid;
   grid-template-rows: 30px minmax(0, 1fr);
