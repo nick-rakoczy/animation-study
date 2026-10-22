@@ -8,7 +8,7 @@ The viewer uses a seekable compressed playback proxy for playback and frame navi
 
 ## Requirements
 
-- Node.js 24 or newer with npm 12 or newer
+- Node.js 26.12.0 or newer with npm 12 or newer. The `.node-version` file pins the version used for local development and GitHub Actions.
 - `ffmpeg` and `ffprobe` on `PATH`
 
 See [FFmpeg installation instructions](docs/FFMPEG_INSTALLATION.md) for Linux and Windows setup.
