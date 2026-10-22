@@ -8,6 +8,7 @@ import { createInclusiveTimelineRange, timelineRangeFractions, type InclusiveTim
 import { defaultTimelineScaleIndex, nextTimelineScaleIndex, timelineSampleCounts } from "../../src/timeline-scale.js";
 import { scrollAdjustmentToReveal } from "../../src/timeline-scroll.js";
 import { timelinePositionFromOffset } from "../../src/timeline-scrub.js";
+import { installVideoFileDrop } from "../../src/video-file-drop.js";
 
 type PlaybackElementIndex = 0 | 1;
 
@@ -32,6 +33,8 @@ export function App() {
   const [visibleVideoIndex, setVisibleVideoIndex] = useState<PlaybackElementIndex>(0);
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fileHovering, setFileHovering] = useState(false);
+  const openingVideo = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const firstVideoElement = useRef<HTMLVideoElement>(null);
   const secondVideoElement = useRef<HTMLVideoElement>(null);
@@ -74,11 +77,15 @@ export function App() {
     }
   }, []);
 
-  const openVideo = useCallback(async () => {
+  const openVideo = useCallback(async (file?: File) => {
+    if (openingVideo.current) return;
+    openingVideo.current = true;
     setBusy(true);
     setError(null);
     try {
-      const opened = await window.animationStudy.openVideo();
+      const opened = await (file
+        ? window.animationStudy.openDroppedVideo(file)
+        : window.animationStudy.openVideo());
       if (opened) {
         setVideo(opened);
         requestedTimelinePosition.current = 0;
@@ -102,6 +109,7 @@ export function App() {
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
+      openingVideo.current = false;
       setBusy(false);
     }
   }, []);
@@ -123,6 +131,13 @@ export function App() {
 
   const canOpenVideo = !busy && !toolBusy && tools?.available === true;
   const canClearUnusedCache = !cacheBusy && analysisStatus?.status !== "running";
+
+  useEffect(() => installVideoFileDrop(window, {
+    canOpen: canOpenVideo,
+    onHover: setFileHovering,
+    onFile: (file) => void openVideo(file),
+    onError: setError,
+  }), [canOpenVideo, openVideo]);
 
   useEffect(() => {
     window.animationStudy.setFileMenuState({ canOpenVideo, canClearUnusedCache });
@@ -534,6 +549,7 @@ export function App() {
 
   return (
     <main className="app-shell">
+      {fileHovering ? <div className="file-drop-overlay" role="status">Drop a video to open it</div> : null}
       <header className="top-bar">
         <div>
           <h1>Animation Study</h1>
@@ -607,7 +623,7 @@ export function App() {
           ) : (
             <div className="empty-state">
               <span className="frame-mark">▧</span>
-              <p>Choose File &gt; Open to inspect a video's frames.</p>
+              <p>Drop a video here or choose File &gt; Open to inspect its frames.</p>
             </div>
           )}
           {busy && video ? <div className="loading-indicator">Loading frame</div> : null}

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { AnimationStudyApi } from "../app-contract.js";
 
 const api: AnimationStudyApi = {
@@ -6,6 +6,11 @@ const api: AnimationStudyApi = {
   chooseFfmpeg: () => ipcRenderer.invoke("media:choose-ffmpeg"),
   resetFfmpeg: () => ipcRenderer.invoke("media:reset-ffmpeg"),
   openVideo: () => ipcRenderer.invoke("media:open-video"),
+  openDroppedVideo: async (file) => {
+    const sourcePath = webUtils.getPathForFile(file);
+    if (!sourcePath) throw new Error("Drop a video file from your computer");
+    return ipcRenderer.invoke("media:open-dropped-video", sourcePath);
+  },
   onOpenVideoRequested: (callback) => {
     const listener = () => callback();
     ipcRenderer.on("media:request-open-video", listener);

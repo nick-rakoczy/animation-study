@@ -79,6 +79,7 @@ export interface AnimationStudyApi {
   chooseFfmpeg(): Promise<MediaToolStatus | null>;
   resetFfmpeg(): Promise<MediaToolStatus>;
   openVideo(): Promise<OpenVideoResult | null>;
+  openDroppedVideo(file: File): Promise<OpenVideoResult>;
   onOpenVideoRequested(callback: () => void): () => void;
   onClearUnusedCacheRequested(callback: () => void): () => void;
   setFileMenuState(state: { canOpenVideo: boolean; canClearUnusedCache: boolean }): void;

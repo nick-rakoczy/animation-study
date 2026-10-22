@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
+import { stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { ApplicationService } from "./application-service.js";
@@ -126,6 +127,13 @@ app.whenReady().then(async () => {
     return result.canceled || !sourcePath ? null : service.openVideo(sourcePath);
   });
   ipcMain.handle("media:get-background-analysis-status", () => service.getBackgroundAnalysisStatus());
+  ipcMain.handle("media:open-dropped-video", async (event, sourcePath: unknown) => {
+    if (event.sender !== mainWindow?.webContents) throw new Error("Unknown window");
+    if (typeof sourcePath !== "string" || !isAbsolute(sourcePath) || !(await stat(sourcePath)).isFile()) {
+      throw new Error("Drop a video file from your computer");
+    }
+    return service.openVideo(sourcePath);
+  });
   ipcMain.handle("media:get-cel-information", (_event, timelinePosition: number) => service.getCelInformation(timelinePosition));
   ipcMain.handle("media:get-adjacent-cel-position", (_event, timelinePosition: number, direction: "previous" | "next") => service.getAdjacentCelPosition(timelinePosition, direction));
   ipcMain.handle("media:get-correction-information", (_event, timelinePosition: number) => service.getCorrectionInformation(timelinePosition));
