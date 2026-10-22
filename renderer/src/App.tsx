@@ -36,7 +36,6 @@ export function App() {
   const firstVideoElement = useRef<HTMLVideoElement>(null);
   const secondVideoElement = useRef<HTMLVideoElement>(null);
   const activeVideoIndex = useRef<PlaybackElementIndex>(0);
-  const openButton = useRef<HTMLButtonElement>(null);
   const timelineScroller = useRef<HTMLDivElement>(null);
   const filmstrip = useRef<HTMLDivElement>(null);
   const playhead = useRef<HTMLDivElement>(null);
@@ -122,6 +121,21 @@ export function App() {
     }
   }, []);
 
+  const canOpenVideo = !busy && !toolBusy && tools?.available === true;
+  const canClearUnusedCache = !cacheBusy && analysisStatus?.status !== "running";
+
+  useEffect(() => {
+    window.animationStudy.setFileMenuState({ canOpenVideo, canClearUnusedCache });
+  }, [canOpenVideo, canClearUnusedCache]);
+
+  useEffect(() => window.animationStudy.onOpenVideoRequested(() => {
+    if (canOpenVideo) void openVideo();
+  }), [canOpenVideo, openVideo]);
+
+  useEffect(() => window.animationStudy.onClearUnusedCacheRequested(() => {
+    if (canClearUnusedCache) void clearUnusedCache();
+  }), [canClearUnusedCache, clearUnusedCache]);
+
   const timelineSampleCount = timelineSampleCounts[timelineScaleIndex]!;
 
   useEffect(() => {
@@ -151,7 +165,7 @@ export function App() {
     if (!focusTimelineWhenReady.current || timelineThumbnails.length === 0) return;
     focusTimelineWhenReady.current = false;
     const activeElement = document.activeElement;
-    if (activeElement === document.body || activeElement === openButton.current) filmstrip.current?.focus();
+    if (activeElement === document.body) filmstrip.current?.focus();
   }, [timelineThumbnails]);
 
   const keepPlayheadInView = useCallback(() => {
@@ -548,12 +562,8 @@ export function App() {
         </div>
         <div className="top-bar-actions">
           {cacheStatus ? <output className="cache-status" aria-live="polite">{cacheStatus}</output> : null}
-          <button disabled={cacheBusy || analysisStatus?.status === "running"} onClick={() => void clearUnusedCache()}>
-            {cacheBusy ? "Clearing..." : "Clear unused cache"}
-          </button>
-          <button ref={openButton} className="open-button" disabled={busy || toolBusy || tools?.available !== true} onClick={() => void openVideo()}>
-            {busy && !video ? "Opening..." : "Open video"}
-          </button>
+          {cacheBusy ? <output className="cache-status" role="status">Clearing unused cache...</output> : null}
+          {busy ? <output role="status">Opening video...</output> : null}
         </div>
       </header>
 
@@ -597,7 +607,7 @@ export function App() {
           ) : (
             <div className="empty-state">
               <span className="frame-mark">▧</span>
-              <p>Open a video to inspect its frames.</p>
+              <p>Choose File &gt; Open to inspect a video's frames.</p>
             </div>
           )}
           {busy && video ? <div className="loading-indicator">Loading frame</div> : null}

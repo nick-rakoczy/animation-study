@@ -79,6 +79,9 @@ export interface AnimationStudyApi {
   chooseFfmpeg(): Promise<MediaToolStatus | null>;
   resetFfmpeg(): Promise<MediaToolStatus>;
   openVideo(): Promise<OpenVideoResult | null>;
+  onOpenVideoRequested(callback: () => void): () => void;
+  onClearUnusedCacheRequested(callback: () => void): () => void;
+  setFileMenuState(state: { canOpenVideo: boolean; canClearUnusedCache: boolean }): void;
   getBackgroundAnalysisStatus(): Promise<BackgroundAnalysisStatus>;
   getCelInformation(timelinePosition: number): Promise<CelInformation>;
   getAdjacentCelPosition(timelinePosition: number, direction: "previous" | "next"): Promise<CelNavigationResult>;

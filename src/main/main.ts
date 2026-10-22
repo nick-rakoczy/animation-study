@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import { ApplicationService } from "./application-service.js";
 import { startAppImageUpdater } from "./app-updater.js";
 import { registerAppImageDesktopEntry } from "./linux-desktop-entry.js";
@@ -148,8 +148,42 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("media:cancel-export", () => service.cancelExport());
   ipcMain.handle("media:clear-unused-cache", () => service.clearUnusedCache());
+  ipcMain.on("media:set-file-menu-state", (event, state) => {
+    if (event.sender !== mainWindow?.webContents) return;
+    const menu = Menu.getApplicationMenu();
+    const openItem = menu?.getMenuItemById("open-video");
+    const clearCacheItem = menu?.getMenuItemById("clear-unused-cache");
+    if (openItem) openItem.enabled = state?.canOpenVideo === true;
+    if (clearCacheItem) clearCacheItem.enabled = state?.canClearUnusedCache === true;
+  });
 
   const window = createWindow();
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
+    {
+      label: "&File",
+      submenu: [
+        {
+          id: "open-video",
+          label: "&Open...",
+          enabled: false,
+          accelerator: "CmdOrCtrl+O",
+          click: () => mainWindow?.webContents.send("media:request-open-video"),
+        },
+        {
+          id: "clear-unused-cache",
+          label: "Clear unused &cache",
+          enabled: false,
+          click: () => mainWindow?.webContents.send("media:request-clear-unused-cache"),
+        },
+        { type: "separator" },
+        { role: process.platform === "darwin" ? "close" : "quit" },
+      ],
+    },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+  ]));
   if (app.isPackaged && process.env.APPIMAGE) {
     try {
       registerAppImageDesktopEntry(process.env.APPIMAGE, app.getVersion());

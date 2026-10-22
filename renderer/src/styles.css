@@ -275,28 +275,10 @@ h1 {
   flex-shrink: 0;
 }
 
-.top-bar-actions button {
-  padding: 9px 12px;
-}
-
 .cache-status {
   max-width: 240px;
   color: #93969c;
   font-size: 11px;
-}
-
-.open-button {
-  min-width: 108px;
-  padding: 9px 14px;
-  color: #191510;
-  border-color: #e4a853;
-  background: #e4a853;
-  font-weight: 650;
-}
-
-.open-button:hover:not(:disabled) {
-  border-color: #f0bc70;
-  background: #f0bc70;
 }
 
 .workspace {
