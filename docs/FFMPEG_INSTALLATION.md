@@ -1,6 +1,6 @@
 # Install FFmpeg
 
-Animation Study requires both `ffmpeg` and `ffprobe` on `PATH`. Restart the application after installation.
+Animation Study requires both FFmpeg and ffprobe. On Windows, you can select FFmpeg in the app. On Linux, install both tools on `PATH` and restart the application.
 
 ## Linux
 
@@ -32,11 +32,12 @@ If the distribution does not provide FFmpeg, use a 64-bit Linux build linked fro
 1. Open the [official FFmpeg download page](https://ffmpeg.org/download.html#build-windows).
 2. Choose one of the linked Windows build providers.
 3. Download and extract a 64-bit build.
-4. Add the extracted `bin` directory, which contains `ffmpeg.exe` and `ffprobe.exe`, to the user or system `Path` environment variable.
-5. Open a new Command Prompt and run `ffmpeg -version` and `ffprobe -version`.
-6. Restart Animation Study.
+4. Open Animation Study and click **Choose FFmpeg** near the FFmpeg status.
+5. Select `ffmpeg.exe` in the extracted `bin` folder. Keep `ffprobe.exe` in the same folder.
 
-Windows exposes environment variables through Advanced System Settings. Microsoft documents that tool in [System configuration tools in Windows](https://support.microsoft.com/en-us/windows/experience/system-configuration-tools-in-windows).
+The app checks both tools and remembers the selected path for future launches. No `PATH` change or restart is needed. If you change the path while a video is open, reopen the video to use the new tools for that video.
+
+Use **Choose FFmpeg** again to change the location, or **Use PATH** to return to the system commands. If a saved location is moved or deleted, select its new location using **Choose FFmpeg**.
 
 ## Missing codecs
 

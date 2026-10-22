@@ -12,6 +12,7 @@ import { timelinePositionFromOffset } from "../../src/timeline-scrub.js";
 type PlaybackElementIndex = 0 | 1;
 
 export function App() {
+  const [toolBusy, setToolBusy] = useState(false);
   const [tools, setTools] = useState<MediaToolStatus | null>(null);
   const [video, setVideo] = useState<OpenVideoResult | null>(null);
   const [timelinePosition, setTimelinePosition] = useState(0);
@@ -59,6 +60,19 @@ export function App() {
 
   useEffect(() => {
     void window.animationStudy.getMediaToolStatus().then(setTools);
+  }, []);
+
+  const configureFfmpeg = useCallback(async (reset = false) => {
+    setToolBusy(true);
+    setError(null);
+    try {
+      const status = await (reset ? window.animationStudy.resetFfmpeg() : window.animationStudy.chooseFfmpeg());
+      if (status) setTools(status);
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setToolBusy(false);
+    }
   }, []);
 
   const openVideo = useCallback(async () => {
@@ -510,6 +524,19 @@ export function App() {
         <div>
           <h1>Animation Study</h1>
           <p className={tools?.available ? "tool-status" : "tool-status tool-error"} role="status">{toolDescription}</p>
+          {tools?.canConfigure ? (
+            <div className="ffmpeg-configuration">
+              <span className="ffmpeg-path" title={tools.ffmpegPath ?? undefined}>
+                {tools.ffmpegPath ?? "Using FFmpeg from PATH"}
+              </span>
+              <button disabled={toolBusy || busy} onClick={() => void configureFfmpeg()}>
+                {toolBusy ? "Checking..." : "Choose FFmpeg"}
+              </button>
+              {tools.ffmpegPath ? (
+                <button disabled={toolBusy || busy} onClick={() => void configureFfmpeg(true)}>Use PATH</button>
+              ) : null}
+            </div>
+          ) : null}
           {video ? (
             <div className={analysisStatus?.status === "failed" ? "analysis-status tool-error" : "analysis-status"} role="status" aria-live="polite">
               <span>{analysisDescription}</span>
@@ -524,7 +551,7 @@ export function App() {
           <button disabled={cacheBusy || analysisStatus?.status === "running"} onClick={() => void clearUnusedCache()}>
             {cacheBusy ? "Clearing..." : "Clear unused cache"}
           </button>
-          <button ref={openButton} className="open-button" disabled={busy || tools?.available !== true} onClick={() => void openVideo()}>
+          <button ref={openButton} className="open-button" disabled={busy || toolBusy || tools?.available !== true} onClick={() => void openVideo()}>
             {busy && !video ? "Opening..." : "Open video"}
           </button>
         </div>

@@ -4,6 +4,8 @@ import type { AnalysisJobProgress } from "./analysis-job.js";
 import type { InclusiveTimelineRange } from "./timeline-range.js";
 
 export interface MediaToolStatus {
+  readonly canConfigure: boolean;
+  readonly ffmpegPath: string | null;
   readonly available: boolean;
   readonly ffmpegVersion: string | null;
   readonly ffprobeVersion: string | null;
@@ -74,6 +76,8 @@ export interface CacheCleanupResult {
 
 export interface AnimationStudyApi {
   getMediaToolStatus(): Promise<MediaToolStatus>;
+  chooseFfmpeg(): Promise<MediaToolStatus | null>;
+  resetFfmpeg(): Promise<MediaToolStatus>;
   openVideo(): Promise<OpenVideoResult | null>;
   getBackgroundAnalysisStatus(): Promise<BackgroundAnalysisStatus>;
   getCelInformation(timelinePosition: number): Promise<CelInformation>;

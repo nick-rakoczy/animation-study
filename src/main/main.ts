@@ -5,7 +5,8 @@ import { ApplicationService } from "./application-service.js";
 import { startAppImageUpdater } from "./app-updater.js";
 import { registerAppImageDesktopEntry } from "./linux-desktop-entry.js";
 import { ensureAppImageInstalled } from "./appimage-installation.js";
-import { getMediaToolStatus } from "../media-tools.js";
+import { loadFfmpegPath, saveFfmpegPath } from "../media-tool-preferences.js";
+import { getMediaToolStatus, resolveMediaTools } from "../media-tools.js";
 import { findAvailableUpdate } from "../release-update.js";
 
 let mainWindow: BrowserWindow | null = null;
@@ -81,8 +82,37 @@ app.whenReady().then(async () => {
     }
   }
 
-  service = new ApplicationService(join(app.getPath("userData"), "frame-cache"));
-  ipcMain.handle("media:get-tool-status", () => getMediaToolStatus());
+  const preferencesPath = join(app.getPath("userData"), "media-tools.json");
+  let ffmpegPath = process.platform === "win32" ? loadFfmpegPath(preferencesPath) : null;
+  service = new ApplicationService(join(app.getPath("userData"), "frame-cache"), resolveMediaTools(ffmpegPath));
+  ipcMain.handle("media:get-tool-status", () => getMediaToolStatus(ffmpegPath));
+  ipcMain.handle("media:choose-ffmpeg", async () => {
+    if (process.platform !== "win32") throw new Error("Choosing FFmpeg is only supported on Windows");
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: "Choose ffmpeg.exe",
+      properties: ["openFile"],
+      filters: [{ name: "FFmpeg executable", extensions: ["exe"] }],
+      ...(ffmpegPath ? { defaultPath: ffmpegPath } : {}),
+    });
+    const selectedPath = result.filePaths[0];
+    if (result.canceled || !selectedPath) return null;
+    if (selectedPath.split(/[\\/]/).at(-1)?.toLowerCase() !== "ffmpeg.exe") {
+      throw new Error("Select ffmpeg.exe from your FFmpeg bin folder");
+    }
+    const status = await getMediaToolStatus(selectedPath);
+    if (!status.available) throw new Error(status.error ?? "Could not run FFmpeg and ffprobe");
+    saveFfmpegPath(preferencesPath, selectedPath);
+    ffmpegPath = selectedPath;
+    service.setMediaTools(resolveMediaTools(ffmpegPath));
+    return status;
+  });
+  ipcMain.handle("media:reset-ffmpeg", async () => {
+    if (process.platform !== "win32") throw new Error("Choosing FFmpeg is only supported on Windows");
+    saveFfmpegPath(preferencesPath, null);
+    ffmpegPath = null;
+    service.setMediaTools(resolveMediaTools());
+    return getMediaToolStatus();
+  });
   ipcMain.handle("media:open-video", async () => {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: "Open video",

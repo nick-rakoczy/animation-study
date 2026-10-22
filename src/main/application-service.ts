@@ -21,7 +21,10 @@ import type { InclusiveTimelineRange } from "../timeline-range.js";
 import { sourceContentFingerprint } from "../source-fingerprint.js";
 import { clearCacheDirectories, type CacheCleanupResult } from "../cache-cleanup.js";
 
+import { resolveMediaTools, type MediaToolExecutables } from "../media-tools.js";
+
 interface VideoSession {
+  readonly mediaTools: MediaToolExecutables;
   readonly sourcePath: string;
   readonly sourceFingerprint: string;
   readonly timing: NormalizedTiming;
@@ -42,7 +45,15 @@ export class ApplicationService {
   #session: VideoSession | null = null;
   #exportAbortController: AbortController | null = null;
 
-  constructor(readonly cacheRoot: string) {}
+  #mediaTools: MediaToolExecutables;
+
+  constructor(readonly cacheRoot: string, mediaTools = resolveMediaTools()) {
+    this.#mediaTools = mediaTools;
+  }
+
+  setMediaTools(mediaTools: MediaToolExecutables): void {
+    this.#mediaTools = mediaTools;
+  }
 
   async openVideo(sourcePath: string): Promise<OpenVideoResult> {
     this.#exportAbortController?.abort();
@@ -50,21 +61,24 @@ export class ApplicationService {
     this.#session?.thumbnailAbortController.abort();
     await this.#session?.thumbnailCache.clear();
     await this.#session?.playback.clear();
-    const timing = await probeVideo(sourcePath);
+    const mediaTools = this.#mediaTools;
+    const timing = await probeVideo(sourcePath, mediaTools.ffprobeExecutable);
     const sourceFingerprint = await sourceContentFingerprint(sourcePath);
     const thumbnailCache = new FrameProxyCache({
       sourcePath,
       sourceFingerprint,
       timing,
       cacheRoot: this.cacheRoot,
+      ffmpegExecutable: mediaTools.ffmpegExecutable,
       widthLimit: 160,
       prefetchRadius: 0,
       maxEntries: 100,
     });
-    const playback = new PlaybackProxy({ sourcePath, sourceFingerprint, timing, cacheRoot: this.cacheRoot });
+    const playback = new PlaybackProxy({ sourcePath, sourceFingerprint, timing, cacheRoot: this.cacheRoot, ffmpegExecutable: mediaTools.ffmpegExecutable });
     const project = new AnalysisProject(sourcePath);
     const playbackPath = await playback.create();
     const session: VideoSession = {
+      mediaTools,
       sourcePath,
       sourceFingerprint,
       timing,
@@ -218,6 +232,7 @@ export class ApplicationService {
     try {
       return await exportExposureSelection({
         sourcePath: session.sourcePath,
+        ffmpegExecutable: session.mediaTools.ffmpegExecutable,
         outputDirectory,
         timeline: session.analysisTimeline,
         range,
@@ -247,6 +262,7 @@ export class ApplicationService {
     const signal = session.analysisAbortController.signal;
     try {
       const proxyCache = new AnalysisProxyCache({
+        ffmpegExecutable: session.mediaTools.ffmpegExecutable,
         sourcePath: session.sourcePath,
         sourceFingerprint: session.sourceFingerprint,
         timing: session.timing,
@@ -259,7 +275,7 @@ export class ApplicationService {
           if (!signal.aborted) session.analysisProgress = progress;
         };
         const proxy = await proxyCache.create(signal, reportProgress);
-        const scores = await new AnalysisScoreCache(proxy).create(signal, reportProgress);
+        const scores = await new AnalysisScoreCache(proxy, session.mediaTools.ffmpegExecutable).create(signal, reportProgress);
         const analysis = new AnalysisSensitivity(defaultAnalysisSensitivity).analyze(scores);
         return {
           scores,

@@ -264,10 +264,15 @@ h1 {
   accent-color: #e4a853;
 }
 
+.top-bar > div:first-child {
+  min-width: 0;
+}
+
 .top-bar-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .top-bar-actions button {
@@ -516,4 +521,25 @@ h1 {
   .information {
     padding: 14px;
   }
+}
+
+.ffmpeg-configuration {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.ffmpeg-configuration button {
+  padding: 4px 8px;
+}
+
+.ffmpeg-path {
+  max-width: 320px;
+  overflow: hidden;
+  color: #9b9da2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
