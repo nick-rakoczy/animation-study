@@ -920,3 +920,52 @@ function byteTotal(bytes: Uint8Array): number {
   for (const byte of bytes) total += byte;
   return total;
 }
+
+test("uses selected media tools for probing, playback, analysis, thumbnails, and export", async (context) => {
+  if (process.platform === "win32") {
+    context.skip("The test executable wrappers require a POSIX shell");
+    return;
+  }
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+    await execFileAsync("ffprobe", ["-version"]);
+  } catch {
+    context.skip("ffmpeg and ffprobe are required for this integration test");
+    return;
+  }
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-custom-tools-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const sourcePath = join(directory, "input.mp4");
+  await execFileAsync("ffmpeg", [
+    "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=64x64:rate=12:duration=0.5",
+    "-c:v", "libx264", "-y", sourcePath,
+  ]);
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  const logPath = join(directory, "calls.log");
+  const ffmpegExecutable = join(directory, "custom ffmpeg");
+  const ffprobeExecutable = join(directory, "ffprobe");
+  for (const [name, path] of [["ffmpeg", ffmpegExecutable], ["ffprobe", ffprobeExecutable]] as const) {
+    await writeFile(path, `#!/bin/sh\nprintf '%s\\n' ${quote(name)} >> ${quote(logPath)}\nexec ${name} "$@"\n`);
+    await chmod(path, 0o755);
+  }
+  const { getMediaToolStatus } = await import("../src/media-tools.js");
+  assert.equal((await getMediaToolStatus(ffmpegExecutable)).available, true);
+  const service = new ApplicationService(join(directory, "cache"), { ffmpegExecutable, ffprobeExecutable });
+  await service.openVideo(sourcePath);
+  await waitFor(() => service.getBackgroundAnalysisStatus().status !== "running");
+  assert.equal(service.getBackgroundAnalysisStatus().status, "ready");
+  const calls = () => readFile(logPath, "utf8");
+  const pipelineCalls = (await calls()).trim().split("\n");
+  assert.equal(pipelineCalls.filter((name) => name === "ffprobe").length, 2);
+  // Version check, playback proxy, analysis proxy, color scores, and edge scores.
+  assert.equal(pipelineCalls.filter((name) => name === "ffmpeg").length, 5);
+  // Changing the preference must not replace tools for an active session.
+  service.setMediaTools({ ffmpegExecutable: "/missing/ffmpeg", ffprobeExecutable: "/missing/ffprobe" });
+  const thumbnails = await service.getTimelineThumbnails(2);
+  assert.equal(thumbnails.length, 2);
+  const beforeExport = (await calls()).trim().split("\n").length;
+  const exported = await service.exportSelection({ startPosition: 0, endPosition: 5, frameCount: 6 }, join(directory, "export"));
+  assert.ok(exported.paths.length > 0);
+  assert.ok((await calls()).trim().split("\n").length > beforeExport);
+  await assert.rejects(service.openVideo(sourcePath), /missing/);
+});

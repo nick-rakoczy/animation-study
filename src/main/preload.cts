@@ -3,6 +3,8 @@ import type { AnimationStudyApi } from "../app-contract.js";
 
 const api: AnimationStudyApi = {
   getMediaToolStatus: () => ipcRenderer.invoke("media:get-tool-status"),
+  chooseFfmpeg: () => ipcRenderer.invoke("media:choose-ffmpeg"),
+  resetFfmpeg: () => ipcRenderer.invoke("media:reset-ffmpeg"),
   openVideo: () => ipcRenderer.invoke("media:open-video"),
   getBackgroundAnalysisStatus: () => ipcRenderer.invoke("media:get-background-analysis-status"),
   getCelInformation: (timelinePosition) => ipcRenderer.invoke("media:get-cel-information", timelinePosition),

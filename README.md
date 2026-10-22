@@ -64,7 +64,7 @@ Install Wine, then run:
 npm run dist:win
 ```
 
-This creates `release/Animation-Study-<version>-win-x64-Setup.exe`, its `.blockmap`, and `release/latest.yml`. The Windows installer requires `ffmpeg` and `ffprobe` on the user's `PATH` as described in the [FFmpeg installation instructions](docs/FFMPEG_INSTALLATION.md). The release workflow builds the installer on Ubuntu and uploads it with the AppImage and both update metadata files. Linux tests and cross-building do not verify the app on Windows.
+This creates `release/Animation-Study-<version>-win-x64-Setup.exe`, its `.blockmap`, and `release/latest.yml`. On Windows, users can select `ffmpeg.exe` in the app with **Choose FFmpeg**, with `ffprobe.exe` in the same folder, as described in the [FFmpeg installation instructions](docs/FFMPEG_INSTALLATION.md). The release workflow builds the installer on Ubuntu and uploads it with the AppImage and both update metadata files. Linux tests and cross-building do not verify the app on Windows.
 
 On a headless Linux builder, install Wine's 32-bit runtime and run `xvfb-run -a npm run dist:win`. electron-builder uses Wine to generate the NSIS uninstaller. The installer stub is 32-bit even though the packaged app is x64.
 
