@@ -6,6 +6,17 @@ const api: AnimationStudyApi = {
   chooseFfmpeg: () => ipcRenderer.invoke("media:choose-ffmpeg"),
   resetFfmpeg: () => ipcRenderer.invoke("media:reset-ffmpeg"),
   openVideo: () => ipcRenderer.invoke("media:open-video"),
+  onOpenVideoRequested: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("media:request-open-video", listener);
+    return () => ipcRenderer.removeListener("media:request-open-video", listener);
+  },
+  onClearUnusedCacheRequested: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("media:request-clear-unused-cache", listener);
+    return () => ipcRenderer.removeListener("media:request-clear-unused-cache", listener);
+  },
+  setFileMenuState: (state) => ipcRenderer.send("media:set-file-menu-state", state),
   getBackgroundAnalysisStatus: () => ipcRenderer.invoke("media:get-background-analysis-status"),
   getCelInformation: (timelinePosition) => ipcRenderer.invoke("media:get-cel-information", timelinePosition),
   getAdjacentCelPosition: (timelinePosition, direction) => ipcRenderer.invoke("media:get-adjacent-cel-position", timelinePosition, direction),

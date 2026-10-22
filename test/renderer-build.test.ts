@@ -184,10 +184,11 @@ test("renderer exports the inclusive timeline selection", async () => {
   assert.match(source, /window\.animationStudy\.cancelExport\(\)/);
 });
 
-test("renderer exposes unused-cache cleanup with progress and results", async () => {
+test("renderer handles File menu cache cleanup with progress and results", async () => {
   const source = await readFile("renderer/src/App.tsx", "utf8");
   assert.match(source, /window\.animationStudy\.clearUnusedCache\(\)/);
-  assert.match(source, /Clear unused cache/);
-  assert.match(source, /cacheBusy \? "Clearing\.\.\."/);
+  assert.match(source, /onClearUnusedCacheRequested/);
+  assert.match(source, /if \(canClearUnusedCache\) void clearUnusedCache\(\)/);
+  assert.match(source, /Clearing unused cache\.\.\./);
   assert.match(source, /className="cache-status" aria-live="polite"/);
 });
