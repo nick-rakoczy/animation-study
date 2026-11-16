@@ -42,7 +42,7 @@ export async function exportExposureSelection(
   const startingFrameNumber = options.range.startPosition + 1;
   const names = exportFileNames(startingFrameNumber, positions.length);
   const stagingDirectory = await mkdtemp(join(exportRoot, `.${sourceFolderName}-export-`));
-  const selection = positions.map((position) => `eq(n\\,${position})`).join("+");
+  const selection = frameSelectionExpression(positions);
 
   try {
     await runProcess(
@@ -94,6 +94,17 @@ export async function exportExposureSelection(
   } finally {
     await rm(stagingDirectory, { force: true, recursive: true });
   }
+}
+
+function frameSelectionExpression(positions: readonly number[]): string {
+  // FFmpeg limits expression depth to 100. Balance additions so depth grows
+  // logarithmically with the selection count instead of once per frame.
+  function sum(start: number, end: number): string {
+    if (end - start === 1) return `eq(n\\,${positions[start]})`;
+    const middle = start + Math.floor((end - start) / 2);
+    return `(${sum(start, middle)}+${sum(middle, end)})`;
+  }
+  return sum(0, positions.length);
 }
 
 export function representativePositionsInRange(
