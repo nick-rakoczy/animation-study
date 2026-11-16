@@ -746,6 +746,69 @@ test("opens the viewer with pending cel data and fills it after background analy
   });
 });
 
+test("exports more than 100 sparse representatives in source order", async (context) => {
+  try {
+    await execFileAsync("ffmpeg", ["-version"]);
+  } catch {
+    context.skip("ffmpeg is required for this integration test");
+    return;
+  }
+
+  const directory = await mkdtemp(join(tmpdir(), "animation-study-large-export-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const sourcePath = join(directory, "sparse fixture.mkv");
+  const exposureCount = 137;
+  const frameCount = exposureCount * 2;
+  await execFileAsync("ffmpeg", [
+    "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=32x24:r=24",
+    "-frames:v", frameCount.toString(), "-c:v", "ffv1", sourcePath,
+  ]);
+
+  const positions = Array.from({ length: exposureCount }, (_, index) => index * 2 + 1);
+  const exported = await exportExposureSelection({
+    sourcePath,
+    outputDirectory: join(directory, "output"),
+    timeline: {
+      schemaVersion: 1,
+      sourceFingerprint: "large-export-fixture",
+      proxySettings: { width: 32, height: 24, edgeLowThreshold: 0.1, edgeHighThreshold: 0.4 },
+      classificationSettings: { sameThreshold: 0.01, changedThreshold: 0.04 },
+      frameCount,
+      spans: positions.map((position, index) => ({
+        id: `exposure-${index}`,
+        exposureIndex: index,
+        displayCelNumber: index + 1,
+        startTimelinePosition: position - 1,
+        endTimelinePosition: position,
+        frameCount: 2,
+        representativeTimelinePosition: position,
+      })),
+      reviewBoundaries: [],
+    },
+    range: { startPosition: 0, endPosition: frameCount - 1, frameCount },
+  });
+  assert.deepEqual(exported.exportedTimelinePositions, positions);
+  assert.equal(exported.paths.length, exposureCount);
+  assert.equal(basename(exported.paths[0]!), "1_0001.png");
+  assert.equal(basename(exported.paths.at(-1)!), "1_0137.png");
+
+  const referencePath = join(directory, "reference.rgb");
+  const actualPath = join(directory, "actual.rgb");
+  await execFileAsync("ffmpeg", [
+    "-v", "error", "-i", sourcePath,
+    "-vf", "select='mod(n,2)',format=rgb24", "-fps_mode", "passthrough",
+    "-f", "rawvideo", referencePath,
+  ]);
+  await execFileAsync("ffmpeg", [
+    "-v", "error", "-start_number", "1",
+    "-i", join(exported.outputDirectory, "1_%04d.png"),
+    "-pix_fmt", "rgb24", "-f", "rawvideo", actualPath,
+  ]);
+  const actual = await readFile(actualPath);
+  assert.equal(actual.length, exposureCount * 32 * 24 * 3);
+  assert.deepEqual(actual, await readFile(referencePath));
+});
+
 test("exports full-resolution frames in decoded display orientation", async (context) => {
   try {
     await execFileAsync("ffmpeg", ["-version"]);
