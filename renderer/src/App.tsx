@@ -32,6 +32,8 @@ export function App() {
   const [timelineRange, setTimelineRange] = useState<InclusiveTimelineRange | null>(null);
   const [visibleVideoIndex, setVisibleVideoIndex] = useState<PlaybackElementIndex>(0);
   const [playing, setPlaying] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [fileHovering, setFileHovering] = useState(false);
   const openingVideo = useRef(false);
@@ -51,6 +53,16 @@ export function App() {
   const videoElementAt = useCallback((index: PlaybackElementIndex) => (
     index === 0 ? firstVideoElement.current : secondVideoElement.current
   ), []);
+  useLayoutEffect(() => {
+    for (const index of [0, 1] as const) {
+      const element = videoElementAt(index);
+      if (element) {
+        element.volume = volume;
+        element.muted = muted || index !== activeVideoIndex.current;
+      }
+    }
+  }, [muted, volume, video, videoElementAt]);
+
   const playbackRange = useMemo(() => {
     if (!video) return null;
     return timelineRange ?? createInclusiveTimelineRange(
@@ -314,7 +326,8 @@ export function App() {
 
     const { startTimeSeconds } = playbackRangeTimes(video.playbackFrames, playbackRange);
     activeVideoIndex.current = incomingIndex;
-    incoming.muted = false;
+    incoming.volume = volume;
+    incoming.muted = muted;
     outgoing.muted = true;
     incoming.classList.add("active");
     outgoing.classList.remove("active");
@@ -329,7 +342,7 @@ export function App() {
     });
     void prepareLoopVideo(outgoing, startTimeSeconds).catch((caught) => setError(errorMessage(caught)));
     return true;
-  }, [playbackRange, video, videoElementAt]);
+  }, [muted, playbackRange, video, videoElementAt, volume]);
 
   const togglePlayback = useCallback(async () => {
     const element = videoElementAt(activeVideoIndex.current);
@@ -595,7 +608,7 @@ export function App() {
                   src={video.playbackUrl}
                   preload="auto"
                   playsInline
-                  muted={index !== visibleVideoIndex}
+                  muted={muted || index !== visibleVideoIndex}
                   onPlay={(event) => {
                     if (event.currentTarget === videoElementAt(activeVideoIndex.current)) setPlaying(true);
                   }}
@@ -828,12 +841,44 @@ export function App() {
       </section>
 
       <footer className="transport">
-        <button aria-label="First frame" aria-keyshortcuts="Home" disabled={!video || busy || timelinePosition === 0} onClick={() => void showFrame(0)}>│◀</button>
-        <button aria-label="Previous frame" aria-keyshortcuts="ArrowLeft ," disabled={!video || busy || timelinePosition === 0} onClick={() => stepFrame(-1)}>◀</button>
-        <button className="play-button" aria-label={playing ? "Pause" : "Play"} aria-keyshortcuts="Space" disabled={!video || busy} onClick={() => void togglePlayback()}>{playing ? "❚❚" : "▶"}</button>
-        <output className="frame-readout" aria-live={playing ? "off" : "polite"} aria-atomic="true">{selectedTiming ? selectedTiming.displayFrameNumber.toString().padStart(6, "0") : "------"}</output>
-        <button aria-label="Next frame" aria-keyshortcuts="ArrowRight ." disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => stepFrame(1)}>▶</button>
-        <button aria-label="Last frame" aria-keyshortcuts="End" disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => video && void showFrame(video.playbackFrames.length - 1)}>▶│</button>
+        <div className="transport-playback">
+          <button aria-label="First frame" aria-keyshortcuts="Home" disabled={!video || busy || timelinePosition === 0} onClick={() => void showFrame(0)}>│◀</button>
+          <button aria-label="Previous frame" aria-keyshortcuts="ArrowLeft ," disabled={!video || busy || timelinePosition === 0} onClick={() => stepFrame(-1)}>◀</button>
+          <button className="play-button" aria-label={playing ? "Pause" : "Play"} aria-keyshortcuts="Space" disabled={!video || busy} onClick={() => void togglePlayback()}>{playing ? "❚❚" : "▶"}</button>
+          <output className="frame-readout" aria-live={playing ? "off" : "polite"} aria-atomic="true">{selectedTiming ? selectedTiming.displayFrameNumber.toString().padStart(6, "0") : "------"}</output>
+          <button aria-label="Next frame" aria-keyshortcuts="ArrowRight ." disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => stepFrame(1)}>▶</button>
+          <button aria-label="Last frame" aria-keyshortcuts="End" disabled={!video || busy || timelinePosition === video.playbackFrames.length - 1} onClick={() => video && void showFrame(video.playbackFrames.length - 1)}>▶│</button>
+        </div>
+        <div className="audio-controls" role="group" aria-label="Audio controls">
+          <button
+            aria-label={muted ? "Unmute" : "Mute"}
+            aria-pressed={muted}
+            title={muted ? "Unmute" : "Mute"}
+            disabled={!video}
+            onClick={() => setMuted((value) => !value)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M11 5 6 9H3v6h3l5 4Z" />
+              {muted || volume === 0 ? <path d="m16 9 6 6m0-6-6 6" /> : <>
+                <path d="M15 8a6 6 0 0 1 0 8" />
+                {volume > 0.5 ? <path d="M18 5a10 10 0 0 1 0 14" /> : null}
+              </>}
+            </svg>
+          </button>
+          <input
+            type="range"
+            aria-label="Volume"
+            aria-valuetext={`${Math.round(volume * 100)} percent${muted ? ", muted" : ""}`}
+            min="0"
+            max="100"
+            value={Math.round(volume * 100)}
+            disabled={!video}
+            onChange={(event) => {
+              setVolume(Number(event.currentTarget.value) / 100);
+              setMuted(false);
+            }}
+          />
+        </div>
       </footer>
 
       {error ? <div className="error-banner" role="alert">{error}</div> : null}
